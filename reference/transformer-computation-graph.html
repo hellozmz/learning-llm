@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>参考：Transformer 完整计算图（公式·形状·计算量）</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 800px; margin: 0 auto; padding: 2.5rem 1.5rem; font-size: 16px;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.2rem; margin: 2rem 0 0.6rem; padding-top: 0.4rem; border-top: 2px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.3rem 0 0.4rem; color: #444; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.8rem; }
+  code {
+    background: var(--code-bg); padding: 0.12em 0.3em; border-radius: 3px;
+    font-size: 0.88em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 0.8rem 1rem; border-radius: 6px;
+    overflow-x: auto; margin: 0.8rem 0; font-size: 0.84em; line-height: 1.6;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 0.8rem 0; font-size: 0.88em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+  th { background: var(--code-bg); font-weight: 600; }
+  .step {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0;
+  }
+  .step h3 { margin-top: 0; }
+  .step-idx {
+    display: inline-block; background: var(--accent); color: white;
+    width: 1.5em; height: 1.5em; border-radius: 50%; text-align: center;
+    line-height: 1.5em; font-size: 0.8em; margin-right: 0.4em;
+  }
+  .note {
+    color: var(--muted); font-size: 0.85em; margin-top: 0.3rem;
+  }
+  .highlight { background: #fff5b1; padding: 0 0.2em; }
+</style>
+</head>
+<body>
+
+<h1>Transformer 完整计算图</h1>
+<p class="subtitle">原始 Transformer (Encoder-Decoder)，从输入到输出，每步的公式、张量形状、计算复杂度<br>
+假定：batch=1, seq_len=n, d_model=d, h 个头, dₖ=dᵥ=d/h, FFN 扩展 4×</p>
+
+<h2>全局参数</h2>
+
+<table>
+  <tr><th>参数</th><th>形状</th><th>说明</th></tr>
+  <tr><td>Token Embedding</td><td>(vocab_size, d)</td><td>词表嵌入矩阵</td></tr>
+  <tr><td>Position Embedding / Encoding</td><td>(max_len, d)</td><td>位置编码（可学习或 sinusoid）</td></tr>
+  <tr><td>W_Q, W_K, W_V（每层每头）</td><td>(d, dₖ) / (d, dₖ) / (d, dᵥ)</td><td>Attention 投影</td></tr>
+  <tr><td>W_O（每层）</td><td>(hdᵥ, d) = (d, d)</td><td>Multi-head 输出投影</td></tr>
+  <tr><td>W₁, b₁（每层 FFN）</td><td>(d, 4d), (4d,)</td><td>FFN 升维</td></tr>
+  <tr><td>W₂, b₂（每层 FFN）</td><td>(4d, d), (d,)</td><td>FFN 降维</td></tr>
+  <tr><td>γ, β × N（LayerNorm）</td><td>(d,) 各一个</td><td>每个子层前后各一个 LN</td></tr>
+</table>
+
+<h2>ENCODER</h2>
+
+<div class="step">
+<h3><span class="step-idx">E1</span> Input Embedding + Positional Encoding</h3>
+<pre><code>x = Embedding(token_ids) + PositionEncoding(positions)
+输入: (n,)         → token IDs
+输出: (n, d)       → 每个 token 的 d 维向量
+计算量: O(n·d)     → 查表 + 加法，忽略不计</code></pre>
+</div>
+
+<div class="step">
+<h3><span class="step-idx">E2</span> Multi-Head Self-Attention（每层，Post-Norm 原始版）</h3>
+
+<pre><code># 分头投影: 每个 head 独立做
+Q = x @ W_Q           # (n, d) @ (d, dₖ) → (n, dₖ)   × h 个头
+K = x @ W_K           # (n, d) @ (d, dₖ) → (n, dₖ)
+V = x @ W_V           # (n, d) @ (d, dᵥ) → (n, dᵥ)
+计算量: 3h × n·d·dₖ ≈ 3n·d²  (dₖ = d/h)
+
+# Scaled Dot-Product Attention（每个头）
+S = Q @ Kᵀ            # (n, dₖ) @ (dₖ, n) → (n, n)
+计算量: n²·dₖ = n²·d/h
+
+A = softmax(S / √dₖ)  # (n, n) → (n, n)
+计算量: O(n²)         ← softmax 逐行
+
+O = A @ V             # (n, n) @ (n, dᵥ) → (n, dᵥ)
+计算量: n²·dᵥ = n²·d/h
+
+# 合并多头
+Concat = [O₁, O₂, ..., O_h]  # h 个 (n, dᵥ) → (n, h·dᵥ) = (n, d)
+
+# 输出投影
+out = Concat @ W_O    # (n, d) @ (d, d) → (n, d)
+计算量: n·d²
+
+# 残差连接 + LayerNorm（Post-Norm）
+x = LayerNorm(x + Dropout(out))
+
+Attention 总计算量: O(n·d² + n²·d)   ← 3n·d²(投影) + 2n²·d(点积+加权) + n·d²(W_O)</code></pre>
+</div>
+
+<div class="step">
+<h3><span class="step-idx">E3</span> Feed-Forward Network（每层）</h3>
+
+<pre><code>h = x @ W₁ + b₁      # (n, d) @ (d, 4d) → (n, 4d)
+计算量: 4n·d²
+
+h = ReLU(h)           # (n, 4d) → (n, 4d)
+计算量: O(n·d)
+
+out = h @ W₂ + b₂    # (n, 4d) @ (4d, d) → (n, d)
+计算量: 4n·d²
+
+# 残差连接 + LayerNorm
+x = LayerNorm(x + Dropout(out))
+
+FFN 总计算量: O(8n·d²)   ← 两个线性层各 4n·d²</code></pre>
+</div>
+
+<div class="step">
+<h3><span class="step-idx">E4</span> 堆叠 N 层 Encoder</h3>
+
+<pre><code>Encoder 每层: O(n·d² + n²·d + 8n·d²) ≈ O(n·d² + n²·d)
+N 层 Encoder: O(N·n·d² + N·n²·d)
+
+输出: encoder_output, shape: (n, d)
+      这个输出会作为 Decoder Cross-Attention 的 K 和 V</code></pre>
+</div>
+
+<h2>DECODER</h2>
+
+<div class="step">
+<h3><span class="step-idx">D1</span> Output Embedding + Positional Encoding</h3>
+<pre><code>y = Embedding(output_token_ids) + PositionEncoding(positions)
+输入: (m,)         → 已生成/训练中的目标序列
+输出: (m, d)
+计算量: O(m·d)</code></pre>
+</div>
+
+<div class="step">
+<h3><span class="step-idx">D2</span> Masked Multi-Head Self-Attention（每层）</h3>
+
+<pre><code>与 E2 完全相同，但加了 Causal Mask:
+
+S = Q @ Kᵀ / √dₖ            # (m, dₖ) @ (dₖ, m) → (m, m)
+S[i, j] = -∞  if j > i      # 禁止位置 i 看到位置 j（j 在未来）
+A = softmax(S)               # (m, m), 上三角 ≈ 0
+O = A @ V                    # (m, dᵥ)
+
+计算量: O(m·d² + m²·d)   （与 E2 相同，n→m）
+</code></pre>
+</div>
+
+<div class="step">
+<h3><span class="step-idx">D3</span> Cross-Attention（每层）</h3>
+
+<pre><code>Q = y @ W_Q_dec       # (m, d) @ (d, dₖ) → (m, dₖ)
+                        ↑ Q 来自 Decoder 当前 hidden state
+
+K = enc_out @ W_K_dec  # (n, d) @ (d, dₖ) → (n, dₖ)
+V = enc_out @ W_V_dec  # (n, d) @ (d, dᵥ) → (n, dᵥ)
+                        ↑ K, V 来自 Encoder 输出（E4）
+
+S = Q @ Kᵀ             # (m, dₖ) @ (dₖ, n) → (m, n)
+                        ↑ Decoder 的 m 个位置 × Encoder 的 n 个位置
+A = softmax(S / √dₖ)   # (m, n)
+O = A @ V              # (m, n) @ (n, dᵥ) → (m, dᵥ)
+
+计算量: O(m·d² + n·d² + m·n·d)
+        ↑Q投影    ↑K,V投影  ↑Cross-Attn 点积和加权
+        注意: m≠n 时计算量和 Self-Attn 不同</code></pre>
+</div>
+
+<div class="step">
+<h3><span class="step-idx">D4</span> Feed-Forward Network + 堆叠 + 输出</h3>
+
+<pre><code>FFN: 与 E3 相同，n→m
+Decoder 每层: O(m·d² + m²·d + n·d² + m·n·d + 8m·d²)
+N 层 Decoder: N × 上述
+
+# 最终输出
+logits = decoder_output @ W_embed.T   # (m, d) @ (d, vocab_size) → (m, vocab_size)
+probs  = softmax(logits)               # (m, vocab_size)
+loss   = CrossEntropy(probs, target)   # 训练时
+
+计算量: O(m·d·vocab_size) ≈ O(m·d·V)  ← V=vocab_size 通常很大(50K+)</code></pre>
+</div>
+
+<h2>计算量总结</h2>
+
+<table>
+  <tr><th>操作</th><th>计算量</th><th>瓶颈条件</th></tr>
+  <tr><td>Embedding</td><td>O(n·d)</td><td>忽略不计</td></tr>
+  <tr><td>Q/K/V 投影</td><td>O(n·d²)</td><td>d 大时（大模型）</td></tr>
+  <tr><td class="highlight">Q·Kᵀ（Self-Attn）</td><td class="highlight">O(n²·d)</td><td class="highlight">n 大时（长上下文）</td></tr>
+  <tr><td>A·V 加权</td><td>O(n²·d)</td><td>n 大时</td></tr>
+  <tr><td>W_O 投影</td><td>O(n·d²)</td><td>d 大时</td></tr>
+  <tr><td>FFN</td><td>O(8n·d²)</td><td>d 大时</td></tr>
+  <tr><td>Cross-Attn Q·Kᵀ</td><td>O(m·n·d)</td><td>m,n 都大时</td></tr>
+  <tr><td>LM Head</td><td>O(m·d·V)</td><td>V=50K+ 时不可忽略</td></tr>
+</table>
+
+<p style="margin-top:1rem;"><strong>关键分界线：</strong></p>
+<ul>
+  <li><strong>短序列 (n &lt; d):</strong> O(n·d²) 主导 → FFN 和投影是瓶颈</li>
+  <li><strong>长序列 (n ≫ d):</strong> O(n²·d) 主导 → Attention 是瓶颈，二次增长碾压一切</li>
+  <li>以 GPT-2 Small 为例 (d=768): 当 n &gt; 768×(8/1) ≈ 6K tokens 时，Attention 开始超过 FFN 成为瓶颈</li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大模型系统学习</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 680px; margin: 0 auto; padding: 3rem 1.5rem;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.3rem; }
+  .subtitle { color: var(--muted); margin-bottom: 2.5rem; }
+  .section { margin-bottom: 2.5rem; }
+  .section h2 {
+    font-size: 1.1rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.05em; margin-bottom: 0.8rem;
+    border-bottom: 1px solid var(--border); padding-bottom: 0.3rem;
+  }
+  .card {
+    display: block; padding: 0.9rem 1rem; margin: 0.4rem 0;
+    border: 1px solid var(--border); border-radius: 6px;
+    text-decoration: none; color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .card:hover { border-color: var(--accent); background: #f8fbff; }
+  .card .num { color: var(--accent); font-weight: 600; margin-right: 0.5em; }
+  .card .title { font-weight: 600; }
+  .card .desc { display: block; color: var(--muted); font-size: 0.88em; margin-top: 0.15em; }
+  .status { font-size: 0.78em; padding: 0.1em 0.5em; border-radius: 3px; margin-left: 0.5em; }
+  .status.done { background: #dcffe4; color: #22863a; }
+  .status.wip { background: #fff5b1; color: #8a6d14; }
+  .status.next { background: #f0f0f0; color: #6a737d; }
+</style>
+</head>
+<body>
+
+<h1>系统掌握大模型技术栈</h1>
+<p class="subtitle">从深度学习基础到 Transformer、GPT 架构、RAG/Agent 应用、微调部署</p>
+
+<div class="section">
+  <h2>基础篇：从神经元到 GPT</h2>
+  <a class="card" href="lessons/0001-what-is-neural-network.html">
+    <span class="num">01</span><span class="title">什么是神经网络？</span><span class="status done">已完成</span>
+    <span class="desc">神经元 = 加权求和+激活；学习 = 梯度下降。从线性回归到深度学习的第一步。</span>
+  </a>
+  <a class="card" href="lessons/0002-mlp-and-backprop.html">
+    <span class="num">02</span><span class="title">多层感知机与反向传播</span><span class="status done">已完成</span>
+    <span class="desc">MLP = 堆叠的线性层+激活；反向传播 = 链式法则；PyTorch 5行训练循环。</span>
+  </a>
+  <a class="card" href="lessons/0003-self-attention.html">
+    <span class="num">03</span><span class="title">Self-Attention 机制</span><span class="status done">已完成</span>
+    <span class="desc">Q/K/V 三件套、Scaled Dot-Product、Multi-Head、Causal Mask、O(n²)复杂度。</span>
+  </a>
+  <a class="card" href="lessons/0004-gpt-architecture.html">
+    <span class="num">04</span><span class="title">GPT 架构详解</span><span class="status done">已完成</span>
+    <span class="desc">Token/Position Embedding → N×Block → LM Head，完整前向传播，训练vs推理。</span>
+  </a>
+</div>
+
+<div class="section">
+  <h2>应用篇：RAG / Agent / 工程落地</h2>
+  <a class="card" href="#">
+    <span class="num">05</span><span class="title">Prompt Engineering 原理</span><span class="status next">待开发</span>
+    <span class="desc">Few-shot、Chain-of-Thought、System Prompt 设计、Token 预算管理。</span>
+  </a>
+  <a class="card" href="#">
+    <span class="num">06</span><span class="title">RAG 架构全链路</span><span class="status next">待开发</span>
+    <span class="desc">Embedding → 向量库 → 检索 → 重排序 → 生成，chunking 策略选择。</span>
+  </a>
+  <a class="card" href="#">
+    <span class="num">07</span><span class="title">Agent 设计模式</span><span class="status next">待开发</span>
+    <span class="desc">ReAct / Tool Use / Plan-and-Execute，Function Calling 原理。</span>
+  </a>
+  <a class="card" href="#">
+    <span class="num">08</span><span class="title">LangChain / LlamaIndex 实战</span><span class="status next">待开发</span>
+    <span class="desc">用框架搭建可转债智能分析 PoC。</span>
+  </a>
+</div>
+
+<div class="section">
+  <h2>工程篇：微调与部署</h2>
+  <a class="card" href="#">
+    <span class="num">09</span><span class="title">LoRA / QLoRA 微调</span><span class="status next">待开发</span>
+    <span class="desc">低秩适配原理、QLoRA 量化微调、LLaMA-Factory 实操。</span>
+  </a>
+  <a class="card" href="#">
+    <span class="num">10</span><span class="title">量化：GGUF / AWQ / GPTQ</span><span class="status next">待开发</span>
+    <span class="desc">训练后量化方法对比、显存计算、ollama 本地部署。</span>
+  </a>
+  <a class="card" href="#">
+    <span class="num">11</span><span class="title">vLLM 推理部署</span><span class="status next">待开发</span>
+    <span class="desc">PagedAttention、Continuous Batching、API 服务搭建。</span>
+  </a>
+</div>
+
+<div class="section">
+  <h2>速查参考</h2>
+  <a class="card" href="reference/transformer-computation-graph.html">
+    <span class="title">Transformer 完整计算图</span>
+    <span class="desc">从输入到输出每步的公式、张量形状、计算复杂度速查表。</span>
+  </a>
+</div>
+
+</body>
+</html>

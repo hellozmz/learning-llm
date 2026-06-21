@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第2课：多层感知机与反向传播 —— 让网络真正"深"起来</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+    --highlight: #fff5b1;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", "Source Han Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.35rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.88em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: center; margin: 1.5rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.82em; line-height: 1.5;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem; border-radius: 6px; overflow-x: auto;
+  }
+  .figure-label { font-size: 0.8em; color: var(--muted); margin-top: 0.3rem; text-align: center; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left;
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  .step-num {
+    display: inline-block; width: 1.6em; height: 1.6em;
+    background: var(--accent); color: white; border-radius: 50%;
+    text-align: center; line-height: 1.6em; font-size: 0.85em; font-weight: 700;
+    margin-right: 0.4em;
+  }
+</style>
+</head>
+<body>
+
+<h1>第2课：多层感知机与反向传播</h1>
+<p class="subtitle">把神经元堆起来，再看"学习"到底怎么算出来的<br>预计时间：30 分钟 &nbsp;|&nbsp; 2026-06-17</p>
+
+<h2>1. 回顾：一个神经元的局限</h2>
+
+<p>上节课我们知道了：一个神经元 = 线性模型。它能画一条直线（或高维超平面），但真实世界的数据不是线性的。</p>
+
+<p>解决方案：把多个神经元叠起来，层与层之间加激活函数。这就是<strong>多层感知机（MLP, Multi-Layer Perceptron）</strong>。</p>
+
+<div class="figure">
+输入层      隐藏层 1      隐藏层 2      输出层
+(3维)       (4个神经元)    (4个神经元)    (1维)
+
+  x₁ ──────→ h₁⁽¹⁾ ──→ h₁⁽²⁾
+     ╲  ╱            ╲  ╱
+      ╳               ╳      ──→ ŷ
+     ╱  ╲            ╱  ╲
+  x₂ ──────→ h₂⁽¹⁾ ──→ h₂⁽²⁾
+     ╲  ╱            ╲  ╱
+      ╳               ╳      (每条线
+     ╱  ╲            ╱  ╲    都是一个
+  x₃ ──────→ h₃⁽¹⁾ ──→ h₃⁽²⁾   权重 w)
+               │
+             h₄⁽¹⁾ ──→ h₄⁽²⁾
+
+每个隐藏层: h⁽ˡ⁺¹⁾ = σ(W⁽ˡ⁾ h⁽ˡ⁾ + b⁽ˡ⁾)
+σ = 激活函数（如 ReLU）
+</div>
+<div class="figure-label">图1：一个 3→4→4→1 的 MLP。h⁽ˡ⁾ 表示第 l 层的输出。</div>
+
+<div class="callout">
+<strong>命名法：</strong>"隐藏层"（hidden layer）这个名字来源于——你只看到输入和输出，中间层的值在训练数据里是看不到的，是"隐藏"的。LLM 里的 hidden_size（比如 4096）就是指每层有多少个隐藏神经元。
+</div>
+
+<h2>2. 正向传播：从输入到输出</h2>
+
+<p>用矩阵形式写，一个两层的 MLP：</p>
+
+<pre><code>h = ReLU(W₁x + b₁)     # 第1层：线性变换 + 激活
+ŷ = W₂h + b₂            # 第2层：线性变换（输出层不加激活）</code></pre>
+
+<p>假设输入 x 是 3 维向量，隐藏层有 4 个神经元：</p>
+
+<table>
+  <tr><th>矩阵</th><th>形状</th><th>含义</th></tr>
+  <tr><td><code>W₁</code></td><td>4 × 3</td><td>每行是一个隐藏神经元对 3 个输入的权重</td></tr>
+  <tr><td><code>b₁</code></td><td>4</td><td>每个隐藏神经元的偏置</td></tr>
+  <tr><td><code>W₂</code></td><td>1 × 4</td><td>输出层对 4 个隐藏值的权重</td></tr>
+  <tr><td><code>b₂</code></td><td>1</td><td>输出偏置</td></tr>
+</table>
+
+<p>正向传播就是做两次矩阵乘法 + 一次 ReLU。这就是 PyTorch 里 <code>model(x)</code> 在干的事。</p>
+
+<h2>3. 反向传播：Loss 怎么反向流动？</h2>
+
+<p>第 1 课我们用伪代码算过 <code>w * x + b</code> 的梯度。现在网络有 W₁, b₁, W₂, b₂ 四个参数，每个都需要算梯度。</p>
+
+<p>核心工具是<strong>链式法则（chain rule）</strong>。你高数课上学过：</p>
+
+<div class="figure">
+如果 L = f(g(x))，那么 ∂L/∂x = f'(g(x)) · g'(x)
+
+推广到多层：
+L = loss( W₂ · ReLU(W₁·x + b₁) + b₂ , y_true )
+
+         ┌──────────────┐
+∂L/∂W₂ = │ ∂L/∂ŷ · ∂ŷ/∂W₂          │  (输出层梯度)
+         └──────────────┘
+         ┌──────────────────────────┐
+∂L/∂W₁ = │ ∂L/∂ŷ · ∂ŷ/∂h · ∂h/∂z · ∂z/∂W₁  │  (隐藏层梯度)
+         └──────────────────────────┘
+              ↑         ↑        ↑
+           输出层      激活函数   线性变换
+           对 h 的     ReLU 的  对 W₁ 的
+           梯度        梯度      梯度
+</div>
+
+<div class="callout-strong">
+<strong>直觉：</strong>反向传播就是把 loss 这个"错误信号"从输出层逐层往回传。每一层根据自己收到的错误信号，调整自己的参数。离输出越近的层，信号越清晰；离输入越近的层，信号越模糊（这就是"梯度消失"问题的根源，Transformer 那课会讲怎么解决）。
+</div>
+
+<h2>4. 反向传播的五个步骤（手动跟踪一遍）</h2>
+
+<p>假设我们有一个最简单的两层网络，<strong>不用矩阵，只用一个标量</strong>来跟踪每一步：</p>
+
+<div class="figure">
+已知：x=2, y_true=5
+参数初始值：w₁=0.5, b₁=0, w₂=1.0, b₂=0
+激活函数：ReLU(x) = max(0, x)
+
+Step 1 — 前向传播：
+  z₁ = w₁·x + b₁ = 0.5×2 + 0  = 1.0
+  a₁ = ReLU(z₁)      = max(0, 1) = 1.0
+  ŷ  = w₂·a₁ + b₂    = 1.0×1 + 0 = 1.0
+  L  = (ŷ - y_true)² = (1-5)²    = 16
+
+Step 2 — 输出层梯度（离 loss 最近，最好算）：
+  ∂L/∂ŷ      = 2(ŷ - y_true) = 2(1-5) = -8
+  ∂L/∂w₂     = ∂L/∂ŷ · a₁    = -8 × 1 = -8
+  ∂L/∂b₂     = ∂L/∂ŷ · 1     = -8
+
+Step 3 — 隐藏层梯度（要把梯度"穿"过激活函数）：
+  ∂L/∂a₁     = ∂L/∂ŷ · w₂    = -8 × 1.0 = -8
+  ∂L/∂z₁     = ∂L/∂a₁ · ReLU'(z₁)
+             ReLU'(1.0) = 1（因为 z₁ > 0）
+             = -8 × 1 = -8
+  ∂L/∂w₁     = ∂L/∂z₁ · x    = -8 × 2 = -16
+  ∂L/∂b₁     = ∂L/∂z₁ · 1    = -8
+
+Step 4 — 梯度下降更新（lr=0.01）：
+  w₁ ← 0.5 - 0.01×(-16) = 0.66
+  b₁ ← 0   - 0.01×(-8)  = 0.08
+  w₂ ← 1.0 - 0.01×(-8)  = 1.08
+  b₂ ← 0   - 0.01×(-8)  = 0.08
+</div>
+
+<div class="callout-danger">
+<strong>重要：</strong>实际训练中你<strong>不需要手算这些梯度</strong>。PyTorch 的 <code>loss.backward()</code> 自动完成 Step 2-3，<code>optimizer.step()</code> 自动完成 Step 4。但理解这个流程是读懂 Transformer 训练逻辑的前提。
+</div>
+
+<h2>5. PyTorch 中这长什么样</h2>
+
+<pre><code>import torch
+import torch.nn as nn
+
+# 定义一个 3→64→1 的 MLP（就是两个 nn.Linear）
+model = nn.Sequential(
+    nn.Linear(3, 64),    # W₁: 64×3, b₁: 64
+    nn.ReLU(),           # 激活函数
+    nn.Linear(64, 1),    # W₂: 1×64, b₂: 1
+)
+
+# 训练循环 —— 注意和上节课伪代码一模一样
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+for epoch in range(100):
+    y_pred = model(x)                     # Step 1: 前向传播
+    loss = ((y_pred - y_true) ** 2).mean() # 算 loss
+    optimizer.zero_grad()                  # 清空上一次的梯度
+    loss.backward()                        # Step 2-3: 自动反向传播
+    optimizer.step()                       # Step 4: 更新参数</code></pre>
+
+<p>这 5 行训练循环是<strong>所有深度学习框架的通用模式</strong>，从最简单的 MLP 到 GPT-4 都长这样。</p>
+
+<div class="callout">
+<strong>对照你项目中已有的代码：</strong>去看看 <code>core/price_trend_model.py</code>，里面应该也有类似的训练循环。看一下它的 <code>forward()</code> 是怎么定义的、<code>loss.backward()</code> 在哪里调用的。
+</div>
+
+<h2>6. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/3</h3>
+<p>为什么叫"隐藏层"（hidden layer）？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">A. 因为这些层的计算被加密了</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q1')">B. 因为训练数据里只有输入和输出的标签，中间层的值是不可见的</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">C. 因为这些层使用秘密的激活函数</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/3</h3>
+<p>反向传播中，链式法则的作用是什么？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">A. 让网络层数可以任意增加</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">B. 自动选择最优的学习率</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q2')">C. 将 loss 的梯度从输出层逐层分解传播到每一层的每个参数</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/3</h3>
+<p>下面这段代码中的 <code>loss.backward()</code> 做了什么？</p>
+<pre><code>loss = (y_pred - y_true).pow(2).mean()
+loss.backward()</code></pre>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">A. 把参数往回调整一步</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">B. 重新计算一遍前向传播</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q3')">C. 自动计算 loss 对每个参数的梯度，并存到 param.grad 里</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+</div>
+
+<h2>7. 延伸阅读</h2>
+<ul>
+  <li><strong>必读：</strong><a href="https://d2l.ai/chapter_multilayer-perceptrons/mlp.html" target="_blank">D2L 第5章：多层感知机</a> — 从零实现一个 MLP（30分钟）</li>
+  <li><strong>选读：</strong>3Blue1Brown <a href="https://www.youtube.com/watch?v=Ilg3gGewQ5U" target="_blank">Backpropagation calculus</a>（10分钟，反向传播最优雅的可视化讲解）</li>
+  <li><strong>动手：</strong>打开你项目里的 <code>core/price_trend_model.py</code>，找到训练循环，对比看看是不是这 5 行模式</li>
+</ul>
+
+<h2>8. 下节预告</h2>
+<p>MLP 的问题是：输入必须固定长度，而且"昨天"和"365天前"的信息权重完全独立——不适合处理序列。下节课我们进入<strong>Transformer 的核心：Self-Attention 机制</strong>，这是理解 LLM 的关键一跃。</p>
+
+<div class="footer">
+<p><strong>关键要点：</strong>MLP = 线性层 + 激活，堆叠起来。反向传播 = 链式法则 + 自动微分。PyTorch 帮你做了反向传播，你只需要定义前向传播（forward）+ 写训练循环。</p>
+<p style="margin-top:0.8rem;">有疑问随时问我，比如"链式法则在手算 Step 3 的时候，ReLU 的导数为什么是 1？"</p>
+</div>
+
+<div class="nav">
+  <a href="0001-what-is-neural-network.html">← 第1课：什么是神经网络</a>
+  <a href="0003-self-attention.html">下一课：Self-Attention 机制 →</a>
+</div>
+
+<script>
+function checkQuiz(el, correct, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  if (correct) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确！';
+    fb.style.color = '#22863a';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再想想。';
+    fb.style.color = '#d73a49';
+    parent.querySelector('[data-correct]').classList.add('correct');
+  }
+}
+</script>
+
+</body>
+</html>

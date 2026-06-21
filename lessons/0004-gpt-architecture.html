@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第4课：GPT 架构详解 —— 从 Token 到 Next Token</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", "Source Han Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 740px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.35rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.88em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: left; margin: 1.5rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.78em; line-height: 1.65;
+    white-space: pre; background: var(--code-bg);
+    padding: 1.2rem; border-radius: 6px; overflow-x: auto;
+  }
+  .figure-label { font-size: 0.8em; color: var(--muted); margin-top: 0.3rem; text-align: center; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+  .formula {
+    text-align: center; margin: 1.2rem 0; font-size: 1.05em;
+    font-family: "Georgia", serif; letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+
+<h1>第4课：GPT 架构详解</h1>
+<p class="subtitle">从 Token IDs 输入到 Next-Token Probability 输出，逐层走一遍完整的前向传播<br>预计时间：40 分钟 &nbsp;|&nbsp; 2026-06-17</p>
+
+<h2>1. GPT 和原始 Transformer 的关系</h2>
+
+<p>原始 Transformer（2017）有 Encoder 和 Decoder 两部分。GPT 只保留了 <strong>Decoder</strong>，去掉了 Cross-Attention（因为没有 Encoder 可以 cross）。</p>
+
+<div class="figure">
+原始 Transformer:                  GPT:
+
+  Encoder          Decoder           Decoder-only
+  ┌──────┐        ┌──────┐           ┌──────────────┐
+  │Self  │        │Causal│           │Causal Attn   │
+  │Attn  │        │Attn  │           │    +         │
+  │  +   │   →    │  +   │           │Pre-LayerNorm │
+  │FFN   │        │Cross │           │    +         │
+  └──────┘        │Attn  │           │SwiGLU FFN    │
+                   │  +   │           │    +         │
+                   │FFN   │           │Residual      │
+                   └──────┘           └──────────────┘
+                                            × N 层
+</div>
+
+<p>去掉 Cross-Attention 意味着：GPT 生成每个 token 时，只能看到<strong>自己之前生成的 token</strong>（以及 prompt），不能像翻译模型那样回看源语言的编码。</p>
+
+<h2>2. 完整架构：从输入到输出</h2>
+
+<p>以 GPT-2 Small 为例（124M 参数），逐层跟踪一个 4-token 输入的前向传播：</p>
+
+<div class="figure">
+输入： "央行 降息 利好 债市"
+       ↓ tokenizer.encode()
+       [1234, 5678, 9012, 3456]    ← token IDs, shape: (1, 4)
+</div>
+
+<h3>Step 1: Token Embedding</h3>
+
+<pre><code>wte = nn.Embedding(vocab_size=50257, embedding_dim=768)
+
+token_ids: (1, 4)
+  → wte(token_ids): (1, 4, 768)
+
+每个 token ID 查表得到一个 768 维向量。
+这个表是训练出来的——语义相近的词，向量也相近。
+</code></pre>
+
+<h3>Step 2: Positional Encoding</h3>
+
+<p>Attention 本身<strong>没有顺序概念</strong>——"央行降息"和"降息央行"在 Attention 眼里没有区别（都是两两算相关度）。所以必须注入位置信息。</p>
+
+<pre><code>wpe = nn.Embedding(max_seq_len=1024, embedding_dim=768)
+
+positions = [0, 1, 2, 3]
+pos_emb = wpe(positions): (1, 4, 768)
+
+x = wte(token_ids) + wpe(positions)    ← 直接相加！
+</code></pre>
+
+<p>GPT-2 用的是<strong>可学习的位置编码</strong>（Learned Positional Embedding）。原始 Transformer 用的是正弦位置编码（Sinusoidal），后来 GPT-3/LLaMA 用了 RoPE（旋转位置编码），这个后面再讲。</p>
+
+<div class="callout-strong">
+<strong>关键设计决策：</strong>Token Embedding 和 Position Embedding 直接相加而不是拼接。为什么？拼接会让维度膨胀（768+768=1536），下游所有层都要跟着翻倍。相加保持维度不变，同时实验证明模型能学会在 768 维空间里把"语义"和"位置"信息编码到不同的子空间。
+</div>
+
+<h3>Step 3: Transformer Block（重复 N 次）</h3>
+
+<p>每个 Block 包含两个子层：Causal Self-Attention + FFN。GPT-2 使用 <strong>Pre-Norm</strong>（LayerNorm 放在子层之前）：</p>
+
+<pre><code>def transformer_block(x):
+    # 子层 1: Causal Self-Attention
+    x = x + causal_self_attention(ln_1(x))   ← Pre-Norm + Residual
+
+    # 子层 2: Feed-Forward Network
+    x = x + ffn(ln_2(x))                      ← Pre-Norm + Residual
+
+    return x</code></pre>
+
+<div class="callout-danger">
+<strong>Pre-Norm vs Post-Norm：</strong>原始 Transformer 用的是 Post-Norm（x = ln(x + sublayer(x))），但训练不稳定，需要 warmup。Pre-Norm（x = x + sublayer(ln(x))）让梯度在残差路径上无损传播，训练更稳定，不需要精心调 warmup。所有现代 LLM 都用 Pre-Norm。
+</div>
+
+<p>两个子层拆开看：</p>
+
+<h4>子层 1: Causal Self-Attention</h4>
+
+<pre><code># 从 768 维投影到 Q/K/V 空间
+Q = ln_1(x) @ W_Q    # (1, 4, 768) → (1, 4, 768)
+K = ln_1(x) @ W_K    # 上节课讲过
+V = ln_1(x) @ W_V
+
+# Multi-head: 切成 12 个头
+Q = Q.view(1, 4, 12, 64).transpose(1, 2)  # → (1, 12, 4, 64)
+K = K.view(1, 4, 12, 64).transpose(1, 2)
+V = V.view(1, 4, 12, 64).transpose(1, 2)
+
+# Scaled dot-product attention + causal mask
+attn = softmax(Q @ Kᵀ / √64 + causal_mask)  # (1, 12, 4, 4)
+out  = attn @ V                               # (1, 12, 4, 64)
+
+# 拼回头，过输出投影
+out = out.transpose(1, 2).reshape(1, 4, 768)  # → (1, 4, 768)
+out = out @ W_O                                 # (1, 4, 768)
+</code></pre>
+
+<h4>子层 2: Feed-Forward Network</h4>
+
+<p>GPT-2 的 FFN 很简单，就是第 2 课讲的两层 MLP：</p>
+
+<pre><code># GPT-2 FFN: Linear → GELU → Linear
+h = ln_2(x) @ W_fc     # (1, 4, 768) → (1, 4, 3072), 4× expansion
+h = gelu(h)             # GELU 激活（比 ReLU 平滑）
+out = h @ W_proj        # (1, 4, 3072) → (1, 4, 768), 投影回来
+</code></pre>
+
+<p>现代 LLM（LLaMA 等）把 GELU 换成了 <strong>SwiGLU</strong>（两个线性投影 + SiLU + 逐元素乘），表达能力更强但参数量也多了 1/3。</p>
+
+<h3>Step 4: 语言模型头（LM Head）</h3>
+
+<p>N 个 Block 之后，最后的 hidden state 过一层 LayerNorm，然后投影到词表大小：</p>
+
+<pre><code># x shape: (1, 4, 768)   ← N 个 Block 后的输出
+x = ln_f(x)
+logits = x @ wte.weight.T    # (1, 4, 768) @ (768, 50257) → (1, 4, 50257)
+                               # 注意：GPT-2 用 wte 的转置做 LM head（weight tying）
+probs = softmax(logits[:, -1, :])  # 只取最后一个位置 → (50257,)
+                                      # 这就是 "next token" 的概率分布
+</code></pre>
+
+<div class="callout">
+<strong>Weight Tying：</strong>GPT-2 的 LM Head 权重 = Token Embedding 权重的转置。输入 embedding 和输出投影共享同一套参数，节省了 50257×768 ≈ 38M 参数。这个设计在中小模型里常见，大模型（LLaMA-7B+）通常分开。
+</div>
+
+<h2>3. 一页纸总结：GPT-2 Small 完整规格</h2>
+
+<div class="figure">
+┌─────────────────────────────────────────────────────────┐
+│                    GPT-2 Small (124M)                    │
+│                                                         │
+│  输入 Token IDs                                          │
+│  "央行 降息 利好 债市"                                    │
+│  [1234, 5678, 9012, 3456]    shape: (1, 4)              │
+│      │                                                  │
+│      ▼                                                  │
+│  ┌──────────┐    ┌──────────┐                           │
+│  │   WTE    │    │   WPE    │                           │
+│  │ 50257×768│    │ 1024×768 │                           │
+│  │  ~38.6M  │    │  ~0.8M   │                           │
+│  └────┬─────┘    └────┬─────┘                           │
+│       │   相加 +       │          shape: (1, 4, 768)     │
+│       └───────┬────────┘                                 │
+│               ▼                                          │
+│  ┌─────────────────────────────────────┐                │
+│  │        Transformer Block × 12       │                │
+│  │  ┌─────────────────────────────┐    │                │
+│  │  │  LayerNorm → Causal Attn    │    │                │
+│  │  │  Q,K,V,O: 4 × (768×768)    │    │  每个 Block    │
+│  │  │  12 heads, dₖ=64           │    │  ~7.1M 参数     │
+│  │  │       ↓ Residual +         │    │                │
+│  │  │  LayerNorm → FFN           │    │                │
+│  │  │  W_fc: 768→3072 (4×)      │    │                │
+│  │  │  GELU → W_proj: 3072→768  │    │                │
+│  │  │       ↓ Residual +         │    │                │
+│  │  └─────────────────────────────┘    │  12 × 7.1M    │
+│  └─────────────────────────────────────┘  ≈ 85.0M      │
+│               │                                          │
+│               ▼                                          │
+│  ┌─────────────────────────────────────┐                │
+│  │  LayerNorm → LM Head               │                │
+│  │  logits = x @ WTE.weight.T          │                │
+│  │  (1, 4, 768) → (1, 4, 50257)       │  ← weight tying│
+│  │  softmax(logits[:,-1,:]) → next token 概率           │
+│  └─────────────────────────────────────┘                │
+│                                                         │
+│  总参数: 38.6M(词表) + 0.8M(位置) + 85.0M(12层) ≈ 124M │
+└─────────────────────────────────────────────────────────┘
+</div>
+
+<div class="figure-label">图：GPT-2 Small 完整数据流，从 Token ID 到 Next Token 概率</div>
+
+<p style="margin-top:1.2rem;">关键数字的内在关系：</p>
+
+<div class="figure">
+d_model = 768  ← 这个数字决定了整个网络的"带宽"
+
+为什么是 768？
+  d_model = h × dₖ = 12(头数) × 64(每头维度) = 768
+
+为什么 FFN 是 3072？
+  FFN_hidden = 4 × d_model = 4 × 768 = 3072  ← 标准 4× 扩展
+
+为什么每层 Attention 有 4 个 768² 矩阵？
+  W_Q + W_K + W_V + W_O = 4 个投影矩阵，每个都是 768×768
+  → Attention 部分: 4 × 768² ≈ 2.36M
+
+为什么每层 FFN 有 8 个 768² 的等效参数量？
+  W_fc:  768 × (4×768) = 4 × 768²
+  W_proj: (4×768) × 768 = 4 × 768²
+  → FFN 部分: 8 × 768² ≈ 4.72M
+
+每层总计: 4×768² + 8×768² = 12 × 768² = 12 × 589,824 ≈ 7.1M
+12 层: 12 × 7.1M ≈ 85M
+
+词表 Embedding 为什么这么大？
+  50257 个 token，每个 768 维 → 50257×768 ≈ 38.6M
+  → 占了总参数量的 31%，但只做查表操作
+</div>
+
+<h2>4. 训练 vs 推理：同一个 forward 的不同玩法</h2>
+
+<table>
+  <tr><th>方面</th><th>训练</th><th>推理（自回归生成）</th></tr>
+  <tr>
+    <td>输入</td>
+    <td>完整序列 [t₁, t₂, ..., tₙ]</td>
+    <td>逐 token 生成</td>
+  </tr>
+  <tr>
+    <td>输出</td>
+    <td>每个位置都预测下一个 token<br>（teacher forcing）</td>
+    <td>只取最后一个位置<br>采样/贪心选 next token → 拼回去</td>
+  </tr>
+  <tr>
+    <td>loss</td>
+    <td>所有位置的 cross-entropy</td>
+    <td>不需要算 loss</td>
+  </tr>
+  <tr>
+    <td>mask</td>
+    <td>Causal mask（同一批内所有 seq）</td>
+    <td>Causal mask</td>
+  </tr>
+  <tr>
+    <td>KV Cache</td>
+    <td>不需要（并行算整条序列）</td>
+    <td><strong>必须用</strong>！已生成的 K/V 存着，<br>新 token 只算自己的 Q，避免重复计算</td>
+  </tr>
+</table>
+
+<div class="callout-strong">
+<strong>KV Cache 是你部署推理时必须理解的东西：</strong>推理时第 t 步生成 token，前 t-1 步的 K 和 V 已经在之前的 attention 里算过了。如果不缓存，每生成一个新 token 都要把整条序列重算一遍 attention，复杂度从 O(n) 退化到 O(n²)。KV Cache 把每层的 K、V 存起来，新 token 只算自己的 Q，然后和缓存的 K、V 做 attention。代价是显存占用 = 2 × n_layers × d_model × seq_len（FP16 下 1K token 大约几百 MB，32K 就几十 GB 了）。
+</div>
+
+<h2>5. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4</h3>
+<p>GPT-2 为什么用 Pre-Norm（LayerNorm 放在子层之前）而不是原始 Transformer 的 Post-Norm？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">A. Pre-Norm 计算量更小</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q1')">B. Pre-Norm 让梯度通过残差连接无损传播，训练更稳定，不需要精心设计 warmup</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">C. Pre-Norm 可以让模型层数加倍</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">D. Post-Norm 已被证明会导致过拟合</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4</h3>
+<p>Token Embedding 和 Position Embedding 相加而不是拼接，主要原因是什么？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">A. 相加比拼接计算更快</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">B. 拼接会让词表大小翻倍</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q2')">C. 拼接会让隐藏维度膨胀，下游所有层的参数量都跟着平方增长；相加保持维度，模型能在同一空间内解耦语义和位置信息</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">D. 实验证明拼接效果差</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4</h3>
+<p>GPT-2 Small 的 hidden_size=768。Q 和 K 的每个 head 维度 dₖ=64。Q·Kᵀ 之前除以 √64=8。如果 dₖ 变成 128，不缩放的情况下，Q·Kᵀ 的方差大约会怎么变化？（假设 Q 和 K 的各分量独立同分布，均值为 0，方差为 1）</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">A. 方差不变</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">B. 方差变成原来的 1/128</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q3')">C. 方差变成原来的 128 倍——点积是 dₖ 个独立随机变量的和，每个方差为 1，和为 dₖ。除以 √dₖ 正好把方差拉回 1</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">D. 方差变成原来的 √128 倍</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4</h3>
+<p>推理时如果不使用 KV Cache，生成第 t 个 token 时，attention 层需要计算哪些 Q·Kᵀ 点积？（假设总长度 t=1000）</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">A. 只需要新 token 对前 999 个 token 的点积，1000-1=999 次</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q4')">B. 需要重新计算全部 1000×1000 次点积——因为历史 token 的 Q 和 K 都重新算了一遍。加上前 999 步的累积，总计算量是 O(n²) 而不是 O(n)</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">C. 需要计算全部 1000×1000 次点积，但前面算过的可以复用，实际只算 1000 次</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">D. 不需要计算，因为 Causal Mask 已经把未来 token 屏蔽了</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+</div>
+
+<h2>6. 延伸阅读</h2>
+<ul>
+  <li><strong>交互可视化：</strong><a href="https://bbycroft.net/llm" target="_blank">LLM Visualization</a> — GPT-2 / nanoGPT 的 3D 架构全景，逐层交互式走查。对着这个网站把本节课的每步数据流验证一遍（15分钟）</li>
+  <li><strong>必读：</strong><a href="https://www.youtube.com/watch?v=kCc8FmEb1nY" target="_blank">Karpathy: Let's build GPT from scratch</a>（2小时，手写 GPT-2，建议 1.5x）</li>
+  <li><strong>代码：</strong><a href="https://github.com/karpathy/nanoGPT" target="_blank">nanoGPT</a> — Karpathy 的 GPT-2 最小实现，不到 300 行核心代码</li>
+  <li><strong>论文：</strong><a href="https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf" target="_blank">Language Models are Unsupervised Multitask Learners (GPT-2, Radford et al., 2019)</a></li>
+  <li><strong>深入：</strong><a href="https://arxiv.org/abs/2005.14165" target="_blank">GPT-3: Language Models are Few-Shot Learners</a> — 看 scaling law 和 emergent ability 的源头</li>
+  <li><strong>速查：</strong><a href="../reference/transformer-computation-graph.html">Transformer 完整计算图</a> — 每步公式、张量形状、计算复杂度汇总，适合对着代码逐行验证</li>
+</ul>
+
+<h2>7. 基础篇完成，接下来？</h2>
+
+<p>基础篇的四个核心概念你已经有了：</p>
+
+<div class="figure">
+第1课: 神经元 = 加权求和 + 激活
+第2课: MLP = 堆叠的线性层 + 反向传播 = 链式法则
+第3课: Attention = Q·Kᵀ → softmax → ·V，动态加权聚合上下文
+第4课: GPT = Token Emb + Position Emb + N×(Attention + FFN) → LM Head
+</div>
+
+<p><strong>下一步进入应用篇：</strong>Prompt Engineering 原理、RAG 架构（Embedding + 向量库 + 检索 + 生成）、Agent 设计模式（ReAct / Tool Use / Plan-and-Execute），以及它们在 LangChain/LlamaIndex 中怎么落地。</p>
+
+<div class="footer">
+<p><strong>动手建议：</strong>克隆 <a href="https://github.com/karpathy/nanoGPT" target="_blank">nanoGPT</a>，跑一遍 <code>train.py</code>（CPU 也能跑，用莎士比亚数据集）。然后对着 <code>model.py</code> 逐行对比这节课的架构图，把每个 Tensor 的形状推出来。</p>
+</div>
+
+<div class="nav">
+  <a href="0003-self-attention.html">← 第3课：Self-Attention</a>
+  <a href="#">下一阶段：Prompt Engineering →</a>
+</div>
+
+<script>
+function checkQuiz(el, correct, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  if (correct) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确！';
+    fb.style.color = '#22863a';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再想想。';
+    fb.style.color = '#d73a49';
+    parent.querySelector('[data-correct]').classList.add('correct');
+  }
+}
+</script>
+
+</body>
+</html>

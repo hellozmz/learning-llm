@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第3课：Self-Attention —— Transformer 的灵魂</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", "Source Han Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 740px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.35rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.88em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: center; margin: 1.5rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.8em; line-height: 1.6;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem; border-radius: 6px; overflow-x: auto;
+  }
+  .figure-label { font-size: 0.8em; color: var(--muted); margin-top: 0.3rem; text-align: center; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+  .formula {
+    text-align: center; margin: 1.2rem 0; font-size: 1.05em;
+    font-family: "Georgia", serif; letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+
+<h1>第3课：Self-Attention —— Transformer 的灵魂</h1>
+<p class="subtitle">从"固定权重"到"动态权重"：让每个 token 自己决定要看谁<br>预计时间：35 分钟 &nbsp;|&nbsp; 2026-06-17</p>
+
+<h2>1. MLP 处理序列为什么不行？</h2>
+
+<p>你有训练经验，这条应该深有体会。假设要把一句话"央行降息利好债市"喂给 MLP：</p>
+
+<pre><code>MLP 方案：把所有词拼成一个大向量
+x = [央行, 降息, 利好, 债市]  → 固定长度 embedding
+h = ReLU(Wx + b)
+
+问题1：句子可长可短，MLP 输入维度固定
+问题2："降息"和"利好"的关系、「降息」和"央行"的关系
+         ——MLP 对每对词的权重是固定学死的
+问题3："利好"修改的是"债市"，离了 2 个词位
+         —— MLP 无法建模长距离依赖
+</code></pre>
+
+<p>RNN/LSTM 解决了一部分（可变长度 + 时序传递），但"利好"要传到"债市"需要一步一步走过去，距离越远信息衰减越严重，而且无法并行计算。</p>
+
+<h2>2. Attention 的核心思想：动态加权</h2>
+
+<p>一句话总结 Attention：<strong>对于当前位置，扫一遍所有位置，算出每个位置跟当前位置的"相关度"，然后用这个相关度做加权平均。</strong></p>
+
+<div class="figure">
+句子： 央行  降息  利好  债市
+       ↓    ↓    ↓    ↓
+       1    2    3    4  (位置)
+
+假设你在"利好"(位置3)，要聚合上下文信息：
+
+和"央行"的相关度：0.1  ← 有点关系但不是直接修饰
+和"降息"的相关度：0.3  ← 降息是利好逻辑上的触发条件
+和"利好"的相关度：0.5  ← 自己跟自己当然最相关
+和"债市"的相关度：0.1  ← 利好修饰债市，但语义上没那么近
+
+加权平均 = 0.1·v(央行) + 0.3·v(降息) + 0.5·v(利好) + 0.1·v(债市)
+</div>
+
+<p>注意：这些"相关度"<strong>不是固定的</strong>——同一个词在不同上下文中，跟同一个目标词的相关度完全不同。<strong>相关度是根据当前输入内容动态算出来的。</strong></p>
+
+<h2>3. Q、K、V：Attention 的三件套</h2>
+
+<p>怎么算出这个"相关度"？经典的 scaled dot-product attention 用了三步：</p>
+
+<div class="formula">
+<strong>Attention(Q, K, V) = softmax( Q·Kᵀ / √dₖ ) · V</strong>
+</div>
+
+<p>拆开来看：</p>
+
+<table>
+  <tr><th>矩阵</th><th>含义</th><th>怎么来的</th></tr>
+  <tr>
+    <td><strong>Q</strong> (Query)</td>
+    <td>"我在找什么？"——当前 token 的查询向量</td>
+    <td>x · W_Q，每个 token 有自己的 Q</td>
+  </tr>
+  <tr>
+    <td><strong>K</strong> (Key)</td>
+    <td>"我是什么？"——每个 token 的标签向量</td>
+    <td>x · W_K</td>
+  </tr>
+  <tr>
+    <td><strong>V</strong> (Value)</td>
+    <td>"我有什么信息？"——每个 token 的实际内容</td>
+    <td>x · W_V</td>
+  </tr>
+</table>
+
+<p>计算流程：</p>
+
+<pre><code>1. Q @ Kᵀ     → (seq_len × dₖ) @ (dₖ × seq_len) = (seq_len × seq_len)
+   每一对 token 之间的"原始相关度分数"（attention scores）
+
+2. / √dₖ      → 缩放。dₖ=64 时不缩放，点积值可能到 ±20，
+                  softmax 后会变成 one-hot，梯度趋近于 0
+
+3. softmax()  → 每一行变成概率分布（和为 1）—— 这就是"注意力权重"
+
+4. @ V        → 用注意力权重对 V 做加权平均
+   (seq_len × seq_len) @ (seq_len × dᵥ) = (seq_len × dᵥ)
+   每个 token 得到一个"看完全文后"的新表示</code></pre>
+
+<div class="callout-strong">
+<strong>关键直觉：</strong>Attention 做的事 = 每个 token 发出一个 Query（"谁跟我有关？"），每个 token 挂一个 Key（"我是什么？"），匹配上的就把那个 token 的 Value（"我有的信息"）拉过来。整个过程完全可微分，所以可以端到端训练。
+</div>
+
+<h2>4. Multi-Head Attention：为什么不只用一个头？</h2>
+
+<p>如果只用一组 Q/K/V，一个词只能学会一种"关注模式"。但语言是复杂的——"降息"对"利好"的关注应该同时包含：</p>
+<ul>
+  <li>语法关系（主谓/动宾）</li>
+  <li>语义关系（因果/转折）</li>
+  <li>位置关系（相邻/跨句）</li>
+</ul>
+
+<p>Multi-head 的做法：把 d_model 切成 h 份，每份独立做 attention，最后拼回来。</p>
+
+<div class="figure">
+d_model = 512, h = 8, dₖ = dᵥ = 512/8 = 64
+
+Q: (seq, 512) → 切成 8 个 (seq, 64)
+K: (seq, 512) → 切成 8 个 (seq, 64)
+V: (seq, 512) → 切成 8 个 (seq, 64)
+
+每个头独立算 Attention(Qᵢ, Kᵢ, Vᵢ) → (seq, 64)
+
+8 个头的结果拼起来 → (seq, 512)，再过 W_O 投影
+</div>
+
+<p>不同头确实会学到不同的模式——有的关注相邻词（局部语法），有的关注远距离主语（长程依赖），有的关注标点和分隔符。</p>
+
+<h2>5. 计算复杂度：为什么长上下文是个问题</h2>
+
+<p>这是你在推理部署中会碰到的问题：</p>
+
+<table>
+  <tr><th>操作</th><th>复杂度</th><th>瓶颈在哪</th></tr>
+  <tr><td>Q·Kᵀ</td><td>O(n² · d)</td><td>n=seq_len，二次增长！</td></tr>
+  <tr><td>softmax</td><td>O(n²)</td><td>每个 token 要对全部 n 个 token 求 softmax</td></tr>
+  <tr><td>·V</td><td>O(n² · d)</td><td>加权平均也是 O(n²)</td></tr>
+</table>
+
+<p>这就是为什么 128K 上下文的推理很贵——attention 的计算量随序列长度<strong>平方</strong>增长。FlashAttention 通过分块计算（tiling）和重计算（recomputation）把显存从 O(n²) 压到了 O(n)，但计算量还是 O(n²)。</p>
+
+<h2>6. Self-Attention vs Cross-Attention vs Causal Attention</h2>
+
+<table>
+  <tr><th>类型</th><th>Q 来源</th><th>K,V 来源</th><th>用途</th></tr>
+  <tr>
+    <td><strong>Self-Attention</strong></td>
+    <td>当前序列</td><td>当前序列</td>
+    <td>Encoder / Decoder 自己内部</td>
+  </tr>
+  <tr>
+    <td><strong>Cross-Attention</strong></td>
+    <td>Decoder</td><td>Encoder 输出</td>
+    <td>原始 Transformer decoder 看 encoder</td>
+  </tr>
+  <tr>
+    <td><strong>Causal Attention</strong></td>
+    <td>当前序列</td><td>当前序列 + mask</td>
+    <td>GPT 自回归生成（不能偷看未来）</td>
+  </tr>
+</table>
+
+<p>Causal Attention 的实现很简单——在 softmax 之前把未来位置的分数设为 -∞：</p>
+
+<pre><code>scores = Q @ Kᵀ / √dₖ
+scores = scores.masked_fill(causal_mask == 0, float('-inf'))
+# 位置 i 只能看到 [0, i]，看不到 [i+1, n]
+attn = softmax(scores) @ V</code></pre>
+
+<h2>7. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4</h3>
+<p>为什么 Self-Attention 使用 Q·Kᵀ/√dₖ 而不是直接用 Q·Kᵀ？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">A. 为了减少计算量</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">B. √dₖ 是一个经验常数，让数值更稳定但去掉也能训</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q1')">C. 防止点积值过大导致 softmax 梯度消失——当 dₖ 很大时点积方差会增大，除以 √dₖ 保持方差稳定</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">D. 为了让 Q 和 K 的模长相等</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4</h3>
+<p>Multi-Head Attention 中，如果 d_model=768，h=12，每个头的 dₖ 是多少？做完 attention 后 concat 的向量维度是多少？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">A. dₖ=64, concat=768</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q2')">B. dₖ=64, concat=768（但需要再过 W_O 投影才是最终输出）</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">C. dₖ=768, concat=9216</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">D. dₖ=12, concat=768</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4</h3>
+<p>Causal Attention 的 mask 为什么放在 softmax <strong>之前</strong>而不是之后？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">A. 放在 softmax 之后会改变梯度的符号</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">B. 放在 softmax 之前效率更高</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q3')">C. 放在 softmax 之后 mask，剩余位置的权重和不为 1，破坏了概率分布；放在之前设为 -∞，softmax(-∞)=0，剩余位置自动归一化</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">D. PyTorch 的 softmax 不支持 masked_fill</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4</h3>
+<p>训练时，一个 batch 里有 32 个句子，每个句子 128 个 token，d_model=512。Q 的形状是什么？Q·Kᵀ 的结果形状是什么？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">A. Q:(32,512,128), QKᵀ:(32,512,512)</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q4')">B. Q:(32,128,512), QKᵀ:(32,128,128)</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">C. Q:(128,32,512), QKᵀ:(128,128,32)</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">D. Q:(32,512), QKᵀ:(32,128)</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+</div>
+
+<h2>8. 延伸阅读</h2>
+<ul>
+  <li><strong>图解：</strong><a href="https://github.com/An-Jhon/Hand-Drawn-Transformer" target="_blank">Hand-Drawn Transformer</a> — 手绘风格 Transformer 完整架构图（Encoder/Decoder/Attention 细节），适合打印出来对照学习</li>
+  <li><strong>交互可视化：</strong><a href="https://poloclub.github.io/transformer-explainer/" target="_blank">Transformer Explainer</a>（英文）/ <a href="https://explainer.tubex.chat/" target="_blank">中文版</a> — 输入文字，实时看每个 token 的 Q 怎么查 K、注意力权重怎么分配、V 怎么加权（15分钟）</li>
+  <li><strong>必读：</strong><a href="https://jalammar.github.io/illustrated-transformer/" target="_blank">The Illustrated Transformer — Jay Alammar</a>（最经典的图解，20分钟）</li>
+  <li><strong>必读：</strong>李沐 <a href="https://www.bilibili.com/video/BV1pu411o7BE/" target="_blank">《Attention Is All You Need》论文精读</a>（70分钟，建议 1.5x）</li>
+  <li><strong>论文：</strong><a href="https://arxiv.org/abs/1706.03762" target="_blank">Attention Is All You Need (Vaswani et al., 2017)</a> — 读 Section 3（Model Architecture），只有 5 页</li>
+  <li><strong>深入：</strong><a href="https://arxiv.org/abs/2205.14135" target="_blank">FlashAttention (Dao et al., 2022)</a> — 了解 O(n²) 显存问题怎么被工程解决</li>
+  <li><strong>速查：</strong><a href="../reference/transformer-computation-graph.html">Transformer 完整计算图</a> — 从输入到输出每步的公式、张量形状、计算复杂度速查表</li>
+</ul>
+
+<h2>9. 下节预告</h2>
+<p>第 4 课把 Q/K/V/Attention/FFN/LayerNorm/Residual 全部串起来，拼出一个完整的 GPT-2 架构。我们会逐层走一遍 forward pass，看到从 token IDs 到 next-token probability 的完整数据流。</p>
+
+<div class="footer">
+<p><strong>课后思考：</strong>如果 Self-Attention 是 O(n²) 的，为什么不用 O(n log n) 的方案替掉它？事实上有很多尝试（Linformer, Performer, Mamba/SSM），但目前为止 Attention 的建模能力仍然很难被超越——你觉得原因可能是什么？</p>
+</div>
+
+<div class="nav">
+  <a href="0002-mlp-and-backprop.html">← 第2课：MLP与反向传播</a>
+  <a href="0004-gpt-architecture.html">下一课：GPT 架构详解 →</a>
+</div>
+
+<script>
+function checkQuiz(el, correct, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  if (correct) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确！';
+    fb.style.color = '#22863a';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再想想。';
+    fb.style.color = '#d73a49';
+    parent.querySelector('[data-correct]').classList.add('correct');
+  }
+}
+</script>
+
+</body>
+</html>
