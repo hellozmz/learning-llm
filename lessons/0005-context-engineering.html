@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第5课：从 Prompt Engineering 到 Context Engineering</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 740px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.35rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.88em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: left; margin: 1.2rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.82em; line-height: 1.55;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem 1.2rem; border-radius: 6px; overflow-x: auto;
+  }
+  .figure-label { font-size: 0.8em; color: var(--muted); margin-top: 0.3rem; text-align: center; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+</style>
+</head>
+<body>
+
+<h1>第5课：从 Prompt Engineering 到 Context Engineering</h1>
+<p class="subtitle">2026 年的范式转移：写好提示词不重要，设计好上下文才重要<br>预计时间：30 分钟 &nbsp;|&nbsp; 2026-06-22</p>
+
+<h2>1. 为什么"写提示词"正在过时？</h2>
+
+<p>2023-2024 年，大家都在研究怎么把一句话写得更好让 GPT 产出更好的结果。但 2026 年的共识是：<strong>单条 prompt 的质量天花板很低——真正决定效果的是模型在推理时能"看到"什么信息</strong>。</p>
+
+<div class="figure">
+Prompt Engineering (2023):
+  "你是一个金融分析师。请分析这只转债的..."
+  → 全靠一句话的质量
+
+Context Engineering (2026):
+  系统自动检索了:
+  ✓ 这只转债的条款文档（下修/强赎/回售）
+  ✓ 正股最近 30 天走势
+  ✓ 同行业转债的溢价率对比
+  ✓ 上次触发强赎时的公告内容
+  → 然后把这些 + 用户问题一起发给模型
+  → 模型看到的是"完整上下文"，不是"一句聪明的指令"
+</div>
+
+<div class="callout-strong">
+<strong>核心转变：</strong>Prompt Engineering 是在教模型"怎么想"。Context Engineering 是给模型"足够的信息让它自己想"。前者靠语言技巧，后者靠系统工程。
+</div>
+
+<h2>2. Prompt Engineering 仍然有用的部分</h2>
+
+<p>不是说 prompt 不重要了，而是它从"全部"退到了"基础设施"的角色。以下技术仍然有效且常用：</p>
+
+<h3>System Prompt（角色设定）</h3>
+<pre><code># 好的 System Prompt 特征：
+# 1. 定义角色边界
+# 2. 约束输出格式
+# 3. 声明能力范围
+
+你是一个可转债投资分析助手。你的职责：
+- 根据提供的条款文档和行情数据进行分析
+- 当数据不足时，明确告知用户"需要补充XX信息"
+- 输出使用 Markdown 格式，关键数字加粗
+- 不提供买卖建议，只做客观分析</code></pre>
+
+<h3>Few-shot（示例驱动）</h3>
+<pre><code># 给模型看几个例子，比描述规则更有效
+输入: 转债A，价格110，溢价率15%，正股涨2%
+输出: 转债跟涨，涨幅0.8%，偏股性
+
+输入: 转债B，价格95，溢价率80%，正股涨2%
+输出: 转债几乎不动，涨幅0.1%，偏债性，高溢价压制
+
+输入: 转债C，价格108，溢价率20%，正股跌3%
+输出: ?</code></pre>
+
+<h3>Chain-of-Thought（思维链）</h3>
+<pre><code># 让模型"一步步想"，显著提高推理准确率
+"请一步步分析这只转债是否值得关注：
+ 1. 先看价格和溢价率
+ 2. 再看正股基本面
+ 3. 然后看条款（下修/强赎触发情况）
+ 4. 最后综合判断"
+
+# 2026 年新发现：隐式 CoT（Implicit CoT）
+# 模型内部已经会推理，不需要你显式写"让我们一步步思考"
+# 节省 58% 的生成 token（复旦大学 2026 研究）</code></pre>
+
+<h2>3. Context Engineering 的四个维度</h2>
+
+<table>
+  <tr><th>维度</th><th>Prompt Engineering 做法</th><th>Context Engineering 做法</th></tr>
+  <tr>
+    <td><strong>知识</strong></td>
+    <td>把知识写在 prompt 里</td>
+    <td>RAG 系统自动检索相关文档</td>
+  </tr>
+  <tr>
+    <td><strong>工具</strong></td>
+    <td>在 prompt 里描述工具用法</td>
+    <td>Function Calling + MCP 协议自动接入</td>
+  </tr>
+  <tr>
+    <td><strong>记忆</strong></td>
+    <td>把历史对话拼进 prompt</td>
+    <td>三层记忆：上下文缓存 → 向量检索 → 持久化记忆</td>
+  </tr>
+  <tr>
+    <td><strong>约束</strong></td>
+    <td>在 prompt 里写规则</td>
+    <td>结构化输出（JSON Schema）+ Guardrails 层</td>
+  </tr>
+</table>
+
+<div class="callout">
+<strong>你的可转债场景举例：</strong>用户问"哪些转债的溢价率最近跌得厉害"，不是把"怎么算溢价率"写在 prompt 里，而是设计上下文系统：自动查数据库拿到所有转债的溢价率序列 → 算变化 → 排序 → 把 Top 10 的结果 + 原始数据一起发给模型 → 模型只需做"理解和呈现"。
+</div>
+
+<h2>4. Token 预算管理</h2>
+
+<p>Context Engineering 的核心工程约束：模型的上下文窗口有限，每多放一个 token 都花钱。</p>
+
+<div class="figure">
+典型的 Context 预算分配（128K 窗口的模型）:
+
+System Prompt:      ~500 tokens    (角色 + 输出格式)
+Few-shot Examples:  ~2,000 tokens  (3-5个高质量示例)
+检索到的文档:       ~80,000 tokens (RAG 召回的核心内容)
+对话历史:           ~20,000 tokens (最近几轮对话)
+用户当前问题:       ~500 tokens
+留白（安全余量）:    ~25,000 tokens (防止截断)
+─────────────────────────────────────────
+总计: ~128K
+</div>
+
+<p><strong>原则：</strong>System Prompt 保持尽可能短。示例精而不多。检索到的文档按相关度排序，低相关度的截断。历史对话定期压缩（用模型自己摘要）。</p>
+
+<h2>5. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4</h3>
+<p>Context Engineering 和 Prompt Engineering 的核心区别是什么？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">A. Context Engineering 用更长的 prompt</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q1')">B. Prompt Engineering 靠写好指令，Context Engineering 靠设计好模型能"看到"的信息系统</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">C. Context Engineering 不需要 System Prompt</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q1')">D. Prompt Engineering 只适用于 GPT-3，Context Engineering 适用于 GPT-4</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4</h3>
+<p>System Prompt 和 RAG 检索结果同时在上下文里时，System Prompt 应该怎么设计？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">A. 越详细越好，把所有规则都写进去</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q2')">B. 保持精简——定义角色和输出格式即可，具体知识由 RAG 提供，避免浪费 token 预算</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">C. 只写 System Prompt，不需要 RAG</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q2')">D. 把 RAG 检索结果直接写进 System Prompt</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4</h3>
+<p>为什么在可转债分析场景中，Few-shot 示例特别重要？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">A. 因为模型不认识"可转债"这个词</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q3')">B. 因为金融分析的输出格式和推理路径有行业惯例，给 2-3 个"好的范例"比写 20 条规则更有效</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">C. 因为 Few-shot 可以替代所有 RAG 检索</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q3')">D. 因为模型在金融领域没有预训练</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4</h3>
+<p>在 128K 上下文中，为什么要在检索文档区域后预留 ~25K 的安全余量？</p>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">A. 让模型有"思考空间"</div>
+<div class="quiz-option" data-correct="true" onclick="checkQuiz(this, true, 'q4')">B. 防止模型输出被截断——模型的生成长度也要消耗上下文窗口，不留余量会导致回答被腰斩。同时给后续对话轮次留空间</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">C. 这是 API 的硬性要求</div>
+<div class="quiz-option" onclick="checkQuiz(this, false, 'q4')">D. 安全余量不是必需的，可以用满 128K</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+</div>
+
+<h2>6. 延伸阅读</h2>
+<ul>
+  <li><strong>必读：</strong><a href="https://www.oreilly.com/radar/the-ai-agents-stack-2026-edition/" target="_blank">The AI Agents Stack (2026 Edition) — O'Reilly</a> — Context Engineering 在 6 层架构中的位置</li>
+  <li><strong>论文：</strong><a href="https://arxiv.org/abs/2201.11903" target="_blank">Chain-of-Thought Prompting Elicits Reasoning in LLMs (Wei et al., 2022)</a></li>
+</ul>
+
+<div class="footer">
+<p><strong>下节预告：</strong>RAG 基础——Embedding 模型怎么选、向量数据库怎么用、Chunking 策略怎么定。这是 Context Engineering 最核心的工程组件。</p>
+</div>
+
+<div class="nav">
+  <a href="0004-gpt-architecture.html">← 第4课：GPT 架构详解</a>
+  <a href="0006-rag-basics.html">下一课：RAG 基础 →</a>
+</div>
+
+<script>
+function checkQuiz(el, correct, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  if (correct) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确！';
+    fb.style.color = '#22863a';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再想想。';
+    fb.style.color = '#d73a49';
+    parent.querySelector('[data-correct]').classList.add('correct');
+  }
+}
+</script>
+
+</body>
+</html>

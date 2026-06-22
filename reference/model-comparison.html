@@ -177,11 +177,11 @@
     <td class="left">DeepSeek-V2</td>
     <td>236B<sup>§</sup></td>
     <td>60</td>
-    <td>—<sup>M</sup></td>
-    <td>—<sup>M</sup></td>
-    <td>—<sup>M</sup></td>
-    <td>—<sup>M</sup></td>
-    <td>—</td>
+    <td>5120</td>
+    <td>128</td>
+    <td>128</td>
+    <td>1536×160<sup>M</sup></td>
+    <td>MoE</td>
     <td>100K</td>
     <td>128K</td>
     <td class="left">RoPE (MLA)</td>
@@ -190,11 +190,11 @@
     <td class="left">DeepSeek-V3</td>
     <td>671B<sup>§</sup></td>
     <td>61</td>
-    <td>—<sup>M</sup></td>
-    <td>—<sup>M</sup></td>
-    <td>—<sup>M</sup></td>
-    <td>—<sup>M</sup></td>
-    <td>—</td>
+    <td>7168</td>
+    <td>128</td>
+    <td>128</td>
+    <td>2048×256<sup>M</sup></td>
+    <td>MoE</td>
     <td>129K</td>
     <td>128K</td>
     <td class="left">RoPE (MLA)</td>
@@ -205,8 +205,8 @@
   <sup>*</sup> LLaMA 用 SwiGLU（3 个矩阵代替 2 个），等效扩展比 ≈ 8/3 ≈ 2.67×(LLaMA-7B)，后续 LLaMA 系逐步增大<br>
   <sup>†</sup> 使用 GQA（Grouped Query Attention），KV head 数 < Q head 数。表中为 Q head 数<br>
   <sup>‡</sup> Mistral-7B 基础上下文 8K，v0.3 支持到 32K<br>
-  <sup>§</sup> MoE 模型：总参数大但每 token 只激活部分。Mixtral 每 token 激活 12.9B，DeepSeek-V2/V3 每 token 激活 21B/37B<br>
-  <sup>M</sup> DeepSeek-V2/V3 使用 MLA (Multi-Head Latent Attention)，标准 d_model/dₖ 不适用，见下方说明
+  <sup>§</sup> MoE 模型：总参数大但每 token 只激活部分。Mixtral 每 token 激活 12.9B/46.7B，DeepSeek-V2 激活 21B/236B，DeepSeek-V3 激活 37B/671B<br>
+  <sup>M</sup> DeepSeek 使用 MLA 低秩 KV 压缩（KV lora rank=512），KV Cache 极小，传统 dₖ 概念不再适用。表中 dₖ 列标的是 per-head v_head_dim
 </div>
 
 <h2>二、参数量分布（Block vs Embedding）</h2>
