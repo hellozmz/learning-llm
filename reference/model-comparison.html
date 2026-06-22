@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>参考：主流 LLM 架构参数对比</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem; font-size: 16px;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; padding-top: 0.4rem; border-top: 2px solid var(--border); }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 0.8rem 0; font-size: 0.84em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.4rem 0.55rem; text-align: right; }
+  th { background: var(--code-bg); font-weight: 600; text-align: center; }
+  td.left { text-align: left; }
+  td.center { text-align: center; }
+  tr.total td { font-weight: 700; background: #fafafa; border-top: 2px solid #999; }
+  .bar-wrap { display: flex; align-items: center; gap: 0.4rem; }
+  .bar { height: 10px; border-radius: 2px; }
+  .bar.embed { background: #e85d04; }
+  .bar.block { background: var(--accent); }
+  .note { color: var(--muted); font-size: 0.82em; margin-top: 0.15rem; }
+  sup { font-size: 0.75em; color: var(--muted); }
+  .highlight { background: #fff5b1; }
+</style>
+</head>
+<body>
+
+<h1>主流 LLM 架构参数对比</h1>
+<p class="subtitle">从 GPT-2 Small (124M) 到 DeepSeek-V3 (671B)，架构参数与参数量分布</p>
+
+<h2>一、架构关键参数</h2>
+
+<table>
+  <tr>
+    <th>模型</th>
+    <th>总参数</th>
+    <th>层数 N</th>
+    <th>d_model</th>
+    <th>头数 h</th>
+    <th>dₖ</th>
+    <th>FFN 隐层</th>
+    <th>扩展比</th>
+    <th>词表</th>
+    <th>上下文</th>
+    <th>位置编码</th>
+  </tr>
+  <tr>
+    <td class="left">GPT-2 Small</td>
+    <td>124M</td>
+    <td>12</td>
+    <td>768</td>
+    <td>12</td>
+    <td>64</td>
+    <td>3072</td>
+    <td>4×</td>
+    <td>50K</td>
+    <td>1K</td>
+    <td class="left">可学习</td>
+  </tr>
+  <tr>
+    <td class="left">GPT-2 XL</td>
+    <td>1.5B</td>
+    <td>48</td>
+    <td>1600</td>
+    <td>25</td>
+    <td>64</td>
+    <td>6400</td>
+    <td>4×</td>
+    <td>50K</td>
+    <td>1K</td>
+    <td class="left">可学习</td>
+  </tr>
+  <tr>
+    <td class="left">GPT-3</td>
+    <td>175B</td>
+    <td>96</td>
+    <td>12288</td>
+    <td>96</td>
+    <td>128</td>
+    <td>49152</td>
+    <td>4×</td>
+    <td>50K</td>
+    <td>2K</td>
+    <td class="left">可学习</td>
+  </tr>
+  <tr>
+    <td class="left">LLaMA-7B</td>
+    <td>6.7B</td>
+    <td>32</td>
+    <td>4096</td>
+    <td>32</td>
+    <td>128</td>
+    <td>11008</td>
+    <td>⁸⁄₃×<sup>*</sup></td>
+    <td>32K</td>
+    <td>2K</td>
+    <td class="left">RoPE</td>
+  </tr>
+  <tr>
+    <td class="left">LLaMA-2-70B</td>
+    <td>70B</td>
+    <td>80</td>
+    <td>8192</td>
+    <td>64</td>
+    <td>128</td>
+    <td>28672</td>
+    <td>3.5×<sup>*</sup></td>
+    <td>32K</td>
+    <td>4K</td>
+    <td class="left">RoPE</td>
+  </tr>
+  <tr>
+    <td class="left">LLaMA-3-8B</td>
+    <td>8B</td>
+    <td>32</td>
+    <td>4096</td>
+    <td>32<sup>†</sup></td>
+    <td>128</td>
+    <td>14336</td>
+    <td>3.5×</td>
+    <td>128K</td>
+    <td>8K</td>
+    <td class="left">RoPE</td>
+  </tr>
+  <tr>
+    <td class="left">LLaMA-3-405B</td>
+    <td>405B</td>
+    <td>126</td>
+    <td>16384</td>
+    <td>128<sup>†</sup></td>
+    <td>128</td>
+    <td>53248</td>
+    <td>3.25×</td>
+    <td>128K</td>
+    <td>8K</td>
+    <td class="left">RoPE</td>
+  </tr>
+  <tr>
+    <td class="left">Mistral-7B</td>
+    <td>7.3B</td>
+    <td>32</td>
+    <td>4096</td>
+    <td>32<sup>†</sup></td>
+    <td>128</td>
+    <td>14336</td>
+    <td>3.5×</td>
+    <td>32K</td>
+    <td>8K<sup>‡</sup></td>
+    <td class="left">RoPE</td>
+  </tr>
+  <tr>
+    <td class="left">Mixtral 8×7B</td>
+    <td>46.7B<sup>§</sup></td>
+    <td>32</td>
+    <td>4096</td>
+    <td>32<sup>†</sup></td>
+    <td>128</td>
+    <td>14336 × 8<sup>§</sup></td>
+    <td>3.5×·8<sup>§</sup></td>
+    <td>32K</td>
+    <td>32K</td>
+    <td class="left">RoPE</td>
+  </tr>
+  <tr>
+    <td class="left">DeepSeek-V2</td>
+    <td>236B<sup>§</sup></td>
+    <td>60</td>
+    <td>—<sup>M</sup></td>
+    <td>—<sup>M</sup></td>
+    <td>—<sup>M</sup></td>
+    <td>—<sup>M</sup></td>
+    <td>—</td>
+    <td>100K</td>
+    <td>128K</td>
+    <td class="left">RoPE (MLA)</td>
+  </tr>
+  <tr>
+    <td class="left">DeepSeek-V3</td>
+    <td>671B<sup>§</sup></td>
+    <td>61</td>
+    <td>—<sup>M</sup></td>
+    <td>—<sup>M</sup></td>
+    <td>—<sup>M</sup></td>
+    <td>—<sup>M</sup></td>
+    <td>—</td>
+    <td>129K</td>
+    <td>128K</td>
+    <td class="left">RoPE (MLA)</td>
+  </tr>
+</table>
+
+<div class="note" style="margin-top:0.5rem;">
+  <sup>*</sup> LLaMA 用 SwiGLU（3 个矩阵代替 2 个），等效扩展比 ≈ 8/3 ≈ 2.67×(LLaMA-7B)，后续 LLaMA 系逐步增大<br>
+  <sup>†</sup> 使用 GQA（Grouped Query Attention），KV head 数 < Q head 数。表中为 Q head 数<br>
+  <sup>‡</sup> Mistral-7B 基础上下文 8K，v0.3 支持到 32K<br>
+  <sup>§</sup> MoE 模型：总参数大但每 token 只激活部分。Mixtral 每 token 激活 12.9B，DeepSeek-V2/V3 每 token 激活 21B/37B<br>
+  <sup>M</sup> DeepSeek-V2/V3 使用 MLA (Multi-Head Latent Attention)，标准 d_model/dₖ 不适用，见下方说明
+</div>
+
+<h2>二、参数量分布（Block vs Embedding）</h2>
+
+<table>
+  <tr>
+    <th>模型</th>
+    <th>总参数</th>
+    <th>词表参数</th>
+    <th>Block 参数</th>
+    <th>词表占比</th>
+    <th>可视化（词表 ■ / Block ■）</th>
+  </tr>
+  <tr>
+    <td class="left">GPT-2 Small</td>
+    <td>124M</td>
+    <td>38.6M</td>
+    <td>85M</td>
+    <td class="highlight">31.1%</td>
+    <td class="left">
+      <div class="bar-wrap">
+        <div class="bar embed" style="width:62px;"></div>
+        <div class="bar block" style="width:138px;"></div>
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="left">GPT-2 XL</td>
+    <td>1.5B</td>
+    <td>80.4M</td>
+    <td>1.42B</td>
+    <td>5.4%</td>
+    <td class="left">
+      <div class="bar-wrap">
+        <div class="bar embed" style="width:11px;"></div>
+        <div class="bar block" style="width:189px;"></div>
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="left">GPT-3 175B</td>
+    <td>175B</td>
+    <td>617M</td>
+    <td>174.4B</td>
+    <td>0.35%</td>
+    <td class="left">
+      <div class="bar-wrap">
+        <div class="bar embed" style="width:1px;"></div>
+        <div class="bar block" style="width:199px;"></div>
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="left">LLaMA-7B</td>
+    <td>6.7B</td>
+    <td>131M</td>
+    <td>6.57B</td>
+    <td>1.9%</td>
+    <td class="left">
+      <div class="bar-wrap">
+        <div class="bar embed" style="width:4px;"></div>
+        <div class="bar block" style="width:196px;"></div>
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="left">LLaMA-2-70B</td>
+    <td>70B</td>
+    <td>262M</td>
+    <td>69.7B</td>
+    <td>0.37%</td>
+    <td class="left">
+      <div class="bar-wrap">
+        <div class="bar embed" style="width:1px;"></div>
+        <div class="bar block" style="width:199px;"></div>
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="left">LLaMA-3-405B</td>
+    <td>405B</td>
+    <td>2.1B<sup>V</sup></td>
+    <td>403B</td>
+    <td>0.52%</td>
+    <td class="left">
+      <div class="bar-wrap">
+        <div class="bar embed" style="width:1px;"></div>
+        <div class="bar block" style="width:199px;"></div>
+      </div>
+    </td>
+  </tr>
+</table>
+
+<div class="note">
+  <sup>V</sup> LLaMA-3 词表 128K，d_model=16384，词表 Embedding = 128K × 16384 ≈ 2.1B
+</div>
+
+<h2>三、关键规律</h2>
+
+<p style="margin-top:1rem;"><strong>1. 参数量由 d_model 决定，不是层数</strong></p>
+
+<div class="figure" style="text-align:left; background:var(--code-bg); padding:0.8rem 1rem; border-radius:6px; font-family:monospace; font-size:0.84em; margin:0.6rem 0;">
+GPT-2 Small:  N=12,  d_model=768  → 124M<br>
+GPT-2 XL:     N=48,  d_model=1600 → 1.5B  (层数 ×4, 参数 ×12)<br>
+LLaMA-7B:     N=32,  d_model=4096 → 6.7B  (层数 2.7×GPT-2 Sm, 参数 ×54)
+</div>
+
+<p>N 的增长是线性的（每层 ≈ 12×d_model²），d_model 的增长是二次的。d_model 翻倍，每层参数 ×4。</p>
+
+<p style="margin-top:1rem;"><strong>2. 词表占比随 d_model 增大趋近于 0</strong></p>
+
+<p>词表参数 ∝ d_model，Block 参数 ∝ d_model²。d_model 从 768 涨到 4096 时：Block 参数 ×(4096/768)² ≈ ×28，词表 ×5.3。差距只会越来越大。</p>
+
+<p style="margin-top:1rem;"><strong>3. dₖ 几乎不变（64 或 128），头数随 d_model 线性增长</strong></p>
+
+<p>GPT-2 Small: dₖ=64, h=12。LLaMA-7B: dₖ=128, h=32。每头维度选 64~128 是经验最优区间——太小表达能力差，太大 attention 计算变慢。所以 d_model 变大时，不扩 dₖ，而是加头数。</p>
+
+<p style="margin-top:1rem;"><strong>4. FFN 扩展比在缩小</strong></p>
+
+<p>GPT-2/3: 标准 4×。LLaMA-7B 引入 SwiGLU 后等效 ≈ 2.67×(但总参数量因为有 3 个矩阵而接近 4×时的 3/2 → 实际仍约 8×d_model²)。LLaMA-3-405B 降到 3.25×。大模型倾向用更低的扩展比，把参数量分配给更多的层。</p>
+
+<p style="margin-top:1rem;"><strong>5. MoE 改变了"激活参数"和"总参数"的关系</strong></p>
+
+<p>Mixtral 8×7B：总参数 46.7B，但每 token 只激活 12.9B（7B Dense 的 1.8×），推理速度和 13B Dense 模型差不多。</p>
+
+</body>
+</html>
