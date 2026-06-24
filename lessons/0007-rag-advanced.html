@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第7课：RAG 进阶 —— 混合检索 + Reranker + GraphRAG</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.86em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .quiz-explain { margin-top: 0.3rem; font-size: 0.88em; color: var(--muted); display: none; }
+  .code-blank {
+    display: inline-block; width: 120px; border-bottom: 2px solid var(--accent);
+    text-align: center; font-family: "SF Mono", monospace; padding: 0 0.3em;
+  }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: left; margin: 1.2rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.82em; line-height: 1.55;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem 1.2rem; border-radius: 6px; overflow-x: auto;
+  }
+  .figure-label { font-size: 0.8em; color: var(--muted); margin-top: 0.3rem; text-align: center; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+  .compare {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin: 1rem 0;
+    font-size: 0.88em;
+  }
+  .compare > div { border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem 1rem; }
+  .compare .bad { border-left: 4px solid #d73a49; }
+  .compare .good { border-left: 4px solid #34d058; }
+  .compare h4 { margin: 0 0 0.5rem; font-size: 0.95em; }
+</style>
+</head>
+<body>
+
+<h1>第7课：RAG 进阶 —— 从"能跑"到"能打"</h1>
+<p class="subtitle">混合检索 + Reranker + GraphRAG：纯向量检索在金融文档上召回率只有 50%，剩下的 50% 在哪里<br>预计时间：40 分钟 &nbsp;|&nbsp; 2026-06-24</p>
+
+<h2>1. 你已有的知识：哪些可以复用</h2>
+
+<p>如果你做过搜索引擎或 ANN 向量召回，以下概念你已经有肌肉记忆，我们直接带过：</p>
+
+<table>
+  <tr><th>你已知的（搜索引擎）</th><th>RAG 中的对应物</th><th>差异</th></tr>
+  <tr><td>倒排索引 + BM25</td><td>稀疏检索 (Sparse Retrieval)</td><td><strong>相同。</strong> BM25 就是那个 BM25，没变</td></tr>
+  <tr><td>ANN 向量召回 (Faiss/HNSW)</td><td>稠密检索 (Dense Retrieval)</td><td><strong>相同。</strong> Embedding → ANN 索引 → Top-K</td></tr>
+  <tr><td>Learning to Rank (LTR)</td><td>Reranker (Cross-Encoder)</td><td><strong>思路相似，实现不同。</strong> LTR 靠特征工程，Reranker 靠 Transformer 做 query-doc 联合编码</td></tr>
+  <tr><td>知识图谱</td><td>GraphRAG</td><td><strong>最大差异。</strong> 搜索引擎的 KG 是手工构建的，GraphRAG 用 LLM 自动提取实体和关系</td></tr>
+</table>
+
+<div class="callout-strong">
+<strong>这一课的核心问题：</strong>搜索引擎要的是"Top-10 蓝链接"，RAG 要的是"给 LLM 的最优上下文片段"。两者的召回可以复用，但<strong>精排和上下文组装是 RAG 独有的工程挑战</strong>。
+</div>
+
+<h2>2. 混合检索：BM25 + Dense 的正确配方</h2>
+
+<h3>为什么纯向量检索不够</h3>
+
+<p>一个具体的金融文档场景：</p>
+
+<div class="figure">
+查询: "正股价格连续30个交易日低于转股价70%触发下修"
+
+段落A (相关): "正股价格在任意连续30个交易日中低于转股价的70%时，董事会有权..."
+段落B (不相关): "连续20个交易日中至少15个低于转股价的85%时触发回售..."
+
+→ BGE-M3 embedding 下，两段的余弦相似度 > 0.8
+
+原因: Embedding 模型擅长语义主题匹配，但对<strong>精确数值阈值</strong>
+(30 vs 20, 70% vs 85%) 和<strong>法律术语</strong>(下修 vs 回售)的区分力不足。
+</div>
+
+<p>这不是 Embedding 模型的问题——这是<strong>稠密向量的固有特性</strong>：n 维空间中的向量必然丢失精确词面匹配信息。</p>
+
+<h3>BM25 补什么</h3>
+
+<p>BM25 不关心语义，只关心<strong>词频和稀有度</strong>。它不会把"下修"和"回售"搞混，因为它们是完全不同的词。同时它对数值敏感——"30"和"20"是完全不同的 token。</p>
+
+<div class="compare">
+<div class="good">
+  <h4>✅ Dense 擅长</h4>
+  "正股大幅下跌触发条款" → 找回"股价走弱，满足下修条件"<br>
+  <small>语义相近，但措辞完全不同</small>
+</div>
+<div class="bad">
+  <h4 style="color:#d73a49;">❌ Dense 薄弱</h4>
+  "连续30个交易日" vs "连续20个交易日"<br>
+  <small>主题相同(都是"连续交易日条件")，但数值不同——Embedding 分不清</small>
+</div>
+</div>
+
+<div class="compare">
+<div class="good">
+  <h4>✅ BM25 擅长</h4>
+  "转股价的70%" → 精确匹配 "70%"<br>
+  <small>稀有 token "70%" 在 BM25 中获得极高权重</small>
+</div>
+<div class="bad">
+  <h4 style="color:#d73a49;">❌ BM25 薄弱</h4>
+  "怎么判断这只转债有投资价值" → 找不到"该可转债是否值得买入"<br>
+  <small>词面完全不同，但语义相同</small>
+</div>
+</div>
+
+<div class="callout">
+<strong>结论：</strong>金融文档 RAG 中，纯向量的召回率通常只有 50-60%，加上 BM25 可以拉到 75-80%（来源：FinBERT-RAG benchmark, 2024）。这不是"加个 BM25 也好"的锦上添花——是<strong>必须</strong>的。
+</div>
+
+<h3>结果融合：RRF (Reciprocal Rank Fusion)</h3>
+
+<p>BM25 返回一个排序列表，Dense 返回另一个排序列表。怎么合成一个？</p>
+
+<p>做法是 RRF，公式很有名但大多数人只看不用：</p>
+
+<div class="figure">
+RRF 公式:
+  score(d) = Σ_{r ∈ retrievers}  1 / (k + rank_r(d))
+
+其中:
+  - d 是候选文档
+  - r 是每个检索器（BM25、Dense 可以是两个 r，也可以更多）
+  - rank_r(d) 是文档 d 在检索器 r 中的排名（从 1 开始）
+  - k 是平滑常数，默认 60
+
+直观理解:
+  - k 很大(如 60) → 1/(60+1) ≈ 1/(60+100) 差别不大 → 排名 1 和排名 100 几乎等价 → 更"民主"
+  - k 很小(如 1) → 1/(1+1) = 0.5, 1/(1+100) ≈ 0.01 → 排名靠前的文档压倒性优势
+  - k=60 是经验值，来源于搜索社区多年实验
+</div>
+
+<pre><code># RRF 实现（核心逻辑就这几行）
+def reciprocal_rank_fusion(results_list, k=60):
+    """
+    results_list: [bm25_results, dense_results, ...]
+    每个 results 是 [(doc_id, score), ...] 按分数降序
+    """
+    scores = {}
+    for results in results_list:
+        for rank, (doc_id, _) in enumerate(results, start=1):
+            scores[doc_id] = scores.get(doc_id, 0) + 1.0 / (k + rank)
+    # 按 RRF 分数降序返回
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+</code></pre>
+
+<div class="callout-strong">
+<strong>工程陷阱：</strong>BM25 的分数是绝对值（和文档长度、词频相关），Dense 的余弦相似度是 [-1, 1]。直接加权求和（alpha * BM25 + beta * cos）需要先做分数归一化，否则某个来源的分数会碾压另一个。RRF 绕过了这个归一化问题——它只看排名，不看绝对分数。
+</div>
+
+<h2>3. Reranker：用 Transformer 做精排</h2>
+
+<h3>Bi-Encoder vs Cross-Encoder</h3>
+
+<p>这是理解 Reranker 的关键。第一阶段检索用的是 <strong>Bi-Encoder</strong>，第二阶段精排用的是 <strong>Cross-Encoder</strong>。差别很大：</p>
+
+<div class="figure">
+Bi-Encoder（第一阶段，快速召回）:
+  Query → Encoder → q_vec (1024,)
+  Doc1  → Encoder → d1_vec (1024,)  ─┐
+  Doc2  → Encoder → d2_vec (1024,)  ─┤ 独立编码，cos(q, d_i) 计算相似度
+  DocN  → Encoder → dn_vec (1024,)  ─┘
+
+  关键：Query 和 Doc <strong>各自独立编码</strong>，没有交互。
+  速度：可以预先算好所有 Doc 向量，在线只算 Query 向量 → ~1ms
+
+Cross-Encoder（第二阶段，精准重排）:
+  [CLS] Query [SEP] Doc [SEP] → Encoder → 相关性分数
+
+  关键：Query 和 Doc <strong>拼接后一起过 Transformer</strong>，
+  每一层 Attention 都在 Query 和 Doc 的 token 间充分交互。
+  速度：每对 query-doc 都要过一遍完整 Transformer → ~30ms/对
+</div>
+
+<table>
+  <tr><th></th><th>Bi-Encoder</th><th>Cross-Encoder</th></tr>
+  <tr>
+    <td>Query-Doc 交互</td>
+    <td>只在最后的点积</td>
+    <td>每一层都有完整交叉注意力</td>
+  </tr>
+  <tr>
+    <td>Doc 向量预计算</td>
+    <td>可以</td>
+    <td>不可以（每次 query+doc 拼接都不同）</td>
+  </tr>
+  <tr>
+    <td>单次延迟</td>
+    <td>~1ms</td>
+    <td>~30-50ms</td>
+  </tr>
+  <tr>
+    <td>可处理候选数</td>
+    <td>百万级</td>
+    <td>通常 20-50 个（延迟约束）</td>
+  </tr>
+  <tr>
+    <td>代表模型</td>
+    <td>BGE-M3, text2vec</td>
+    <td>BGE-Reranker-v2, Cohere Rerank v3</td>
+  </tr>
+</table>
+
+<h3>两阶段流水线的延迟计算</h3>
+
+<p>假设你的系统从 100 万份文档中检索最相关的片段：</p>
+
+<div class="figure">
+阶段1 (Bi-Encoder 召回):
+  100万 Doc → ANN 索引 → 选 Top-100 → ~5ms
+
+阶段2 (Cross-Encoder 重排):
+  100个候选 → 每个 query-doc 对过 Cross-Encoder → 100 × 30ms = 3000ms
+
+  ⚠️ 3000ms 不可接受！
+
+实际情况:
+  100个候选 → 先用 BM25+Dense 混合粗排(RRF) → 取 Top-20
+  → 20 × 30ms = 600ms → 仍在可接受范围内
+
+或者:
+  用 Cohere Rerank API (支持 batch) → 100 个候选一次请求 → ~200ms
+</div>
+
+<div class="callout-danger">
+<strong>工程现实：</strong>Cross-Encoder 的延迟是线性的（除非服务端批量优化）。100 个候选在某些实现中就是 100 次前向传播。所以在混合检索阶段一定要把候选压缩到 20-30 个以内再送 Reranker。
+</div>
+
+<h3>Reranker 的实际效果</h3>
+
+<p>在金融文档 RAG 基准测试中（BGE-Reranker-v2-m3）：</p>
+
+<table>
+  <tr><th>策略</th><th>Recall@10</th><th>MRR</th><th>延迟</th></tr>
+  <tr><td>纯 Dense (BGE-M3)</td><td>52%</td><td>0.34</td><td>~5ms</td></tr>
+  <tr><td>混合 (Dense + BM25, RRF)</td><td>78%</td><td>0.51</td><td>~10ms</td></tr>
+  <tr><td>混合 + Reranker Top-10</td><td>86%</td><td>0.68</td><td>~350ms</td></tr>
+  <tr><td>混合 + Reranker Top-20</td><td>91%</td><td>0.74</td><td>~650ms</td></tr>
+</table>
+
+<p>Reranker 把 MRR 从 0.51 提升到 0.74——用户看到的相关文档排得更靠前，模型生成答案时"看到的"就是更高质量的信息。</p>
+
+<h2>4. GraphRAG：当向量检索不够"全局"</h2>
+
+<h3>向量检索的边界</h3>
+
+<p>向量检索本质上是<strong>局部匹配</strong>——你问什么，它找语义最接近的片段。但如果问题是：</p>
+
+<div class="figure">
+❌ "2025 年光伏行业可转债的整体转股率趋势如何？"
+   → 没有一个"片段"能回答这个问题
+
+❌ "哪些转债的强赎条款和回售条款之间存在相互影响？"
+   → 需要跨文档理解条款间的关系，不是片段匹配能解决的
+
+❌ "这只转债涉及的担保公司还担保了哪些其他的转债？"
+   → 这是图遍历问题，向量检索只能找到含"担保"关键词的文档
+</div>
+
+<p>这些都是 <strong>Global Query（全局查询）</strong>——需要跨文档的聚合、总结和关系推理。向量检索是 Local Query 的工具，不是 Global Query 的工具。</p>
+
+<h3>Microsoft GraphRAG 的流水线</h3>
+
+<div class="figure">
+GraphRAG 分两个阶段 (offline 和 online):
+
+<strong>Offline (索引构建):</strong>
+  文档 → Entity Extraction (LLM) → Relationship Extraction (LLM)
+       → Knowledge Graph (Entity + Relation nodes)
+       → Community Detection (Leiden algorithm)
+       → Community Summary (LLM 为每个社区生成摘要)
+
+<strong>Online (查询):</strong>
+  Local Query: 问题 → Embedding → 匹配实体 → 返回相关关系和社区摘要
+  Global Query: 问题 → 匹配社区摘要 → 返回跨文档的全局性答案
+</div>
+
+<p>关键创新不是图本身——知识图谱在搜索领域早就有——而是 <strong>LLM 做实体/关系提取</strong> 和 <strong>社区摘要</strong> 这两步。传统 KG 需要人工设计 schema 和手工标注，成本极高。GraphRAG 用 LLM 自动发现实体和关系，不需要预定义 schema。</p>
+
+<h3>GraphRAG 的代价</h3>
+
+<table>
+  <tr><th></th><th>向量 RAG</th><th>GraphRAG</th></tr>
+  <tr><td>索引构建时间（1000 份文档）</td><td>几分钟</td><td>数小时（LLM 需要处理每一段文本做实体提取）</td></tr>
+  <tr><td>索引构建成本（API）</td><td>$0.5</td><td>$15-50（大量 LLM 调用）</td></tr>
+  <tr><td>查询延迟</td><td>~100ms</td><td>Local: ~200ms, Global: ~2s</td></tr>
+  <tr><td>适合的问题类型</td><td>事实提取、条款查找</td><td>总结、趋势、关系推理、全局模式</td></tr>
+  <tr><td>不适合</td><td>多跳推理、全局统计</td><td>精确关键词匹配（大材小用）</td></tr>
+</table>
+
+<div class="callout-strong">
+<strong>决策准则：</strong>90% 的可转债分析场景不需要 GraphRAG——混合检索 + Reranker 足够。只有当你的问题涉及"跨文档关系"（比如"找出所有受同一担保方影响的可转债"）时才值得上 GraphRAG。先用混合检索+Reranker 跑通，把 GraphRAG 作为 RAG 进阶的"高端武器"而不是"默认选项"。
+</div>
+
+<h2>5. 策略选择决策树</h2>
+
+<div class="figure">
+你的查询是什么类型？
+│
+├─ 精确事实查找 ("下修触发条件是30天还是20天?")
+│  → 纯 BM25 可能就够了
+│
+├─ 语义理解查找 ("这只转债的投资风险点在哪里?")
+│  → Dense + Reranker
+│
+├─ 混合："找条款"但表述多样 ("哪些条件会触发回售?")
+│  → 混合检索 (BM25 + Dense, RRF) + Reranker ← <strong>最通用</strong>
+│
+├─ 数值敏感查询 ("溢价率低于15%的可转债")
+│  → BM25 + 结构化过滤（在向量库 metadata 上做 filter，不要
+│     只在 prompt 里放，模型不擅长精确数值过滤）
+│
+└─ 全局总结/关系推理 ("同业转债的条款差异趋势")
+   → GraphRAG (Global Query)
+</div>
+
+<h2>6. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4 — 填空题</h3>
+<p>在金融文档 RAG 中，纯 Dense 检索在区分"连续30个交易日"和"连续20个交易日"时表现不佳。根本原因是：</p>
+<pre style="font-size:0.85em;">A. Embedding 模型的中文词表不包含数字 token
+B. 稠密向量空间压缩导致精确数值特征在降维中丢失
+C. BM25 的分词器无法处理中文数字混合文本
+D. 向量归一化操作将所有文档映射到同一超球面上</pre>
+<p>正确选项是 <span class="code-blank" id="blank1">?</span>，在下方选项区域点击你的选择。</p>
+<div class="quiz-option" data-id="q1" data-value="A" data-code="A" onclick="checkFill(this, 'B', 'q1')">A — 稠密向量在高维投影中丢弃了部分 token 级信息</div>
+<div class="quiz-option" data-id="q1" data-value="B" data-code="B" onclick="checkFill(this, 'B', 'q1')">B — 稠密向量的降维压缩导致精确数值特征在空间映射中丢失</div>
+<div class="quiz-option" data-id="q1" data-value="C" data-code="C" onclick="checkFill(this, 'B', 'q1')">C — 稠密向量语义聚合使 token 级别的精确匹配信号被稀释淹没</div>
+<div class="quiz-option" data-id="q1" data-value="D" data-code="D" onclick="checkFill(this, 'B', 'q1')">D — 稠密向量归一化后只保留方向信息而舍弃了标量的绝对大小</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+<div class="quiz-explain" id="q1-ex"></div>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4 — 场景判断</h3>
+<p>你在做一个可转债 RAG 系统。用户问"哪些银行转债的转股溢价率低于同行业平均水平？"，你选择了<strong>混合检索 + Reranker</strong>的方案。以下哪项最准确地描述了 Reranker 和 Bi-Encoder 在这个场景中的分工？</p>
+<div class="quiz-option" data-id="q2" data-value="A" onclick="checkChoice(this, 'B', 'q2')">A — Bi-Encoder 负责语义召回，Reranker 负责对召回的候选做 BM25 稀疏加权</div>
+<div class="quiz-option" data-id="q2" data-value="B" onclick="checkChoice(this, 'B', 'q2')">B — Bi-Encoder 负责低延迟粗筛大量候选，Reranker 在对少量候选做联合编码精排</div>
+<div class="quiz-option" data-id="q2" data-value="C" onclick="checkChoice(this, 'B', 'q2')">C — Bi-Encoder 负责文档 Embedding 存储，Reranker 负责查询时生成新的文档向量</div>
+<div class="quiz-option" data-id="q2" data-value="D" onclick="checkChoice(this, 'B', 'q2')">D — Bi-Encoder 负责短查询处理，Reranker 负责长文档的全文交叉注意力编码</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+<div class="quiz-explain" id="q2-ex"></div>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4 — 延迟估算</h3>
+<p>你的 RAG pipeline 配置如下：Bi-Encoder 召回 Top-50（5ms），Cross-Encoder Reranker 每对 40ms（无批处理优化）。你需要在 Top-50 中选出 Top-10 送 LLM。Reranker 阶段的总延迟是多少？如果希望 Reranker 总延迟 < 500ms，最多能 rerank 多少个候选？</p>
+<div class="quiz-option" data-id="q3" data-value="A" onclick="checkChoice(this, 'C', 'q3')">A — 总延迟 2000ms，最多 rerank 8 个候选以控制在 500ms 内</div>
+<div class="quiz-option" data-id="q3" data-value="B" onclick="checkChoice(this, 'C', 'q3')">B — 总延迟 400ms，最多 rerank 15 个候选以控制在 500ms 内</div>
+<div class="quiz-option" data-id="q3" data-value="C" onclick="checkChoice(this, 'C', 'q3')">C — 总延迟 2000ms，最多 rerank 12 个候选以控制在 500ms 内</div>
+<div class="quiz-option" data-id="q3" data-value="D" onclick="checkChoice(this, 'C', 'q3')">D — 总延迟 400ms，最多 rerank 12 个候选以控制在 500ms 内</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+<div class="quiz-explain" id="q3-ex"></div>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4 — 架构对比</h3>
+<p>GraphRAG 和向量 RAG 的本质差异不在于"用了图"。二者最核心的架构差异是什么？</p>
+<div class="quiz-option" data-id="q4" data-value="A" onclick="checkChoice(this, 'D', 'q4')">A — GraphRAG 用图数据库代替了向量数据库，因此支持关系型查询</div>
+<div class="quiz-option" data-id="q4" data-value="B" onclick="checkChoice(this, 'D', 'q4')">B — GraphRAG 在查询时实时构建知识图谱以理解文档间关系</div>
+<div class="quiz-option" data-id="q4" data-value="C" onclick="checkChoice(this, 'D', 'q4')">C — GraphRAG 用社区发现算法替代 Embedding 完成相似文档聚类</div>
+<div class="quiz-option" data-id="q4" data-value="D" onclick="checkChoice(this, 'D', 'q4')">D — GraphRAG 在索引阶段用 LLM 预计算实体关系与社区摘要以支持全局查询</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+<div class="quiz-explain" id="q4-ex"></div>
+</div>
+
+<h2>7. 延伸阅读</h2>
+<ul>
+  <li><strong>必读论文：</strong><a href="https://arxiv.org/abs/2404.16130" target="_blank">From Local to Global: A Graph RAG Approach to Query-Focused Summarization (Microsoft, 2024)</a> — GraphRAG 原始论文</li>
+  <li><strong>工程参考：</strong><a href="https://github.com/microsoft/graphrag" target="_blank">microsoft/graphrag (GitHub)</a> — 官方实现，看 prompt 和 pipeline 设计</li>
+  <li><strong>检索增强综述：</strong><a href="https://arxiv.org/abs/2312.10997" target="_blank">Retrieval-Augmented Generation for Large Language Models: A Survey (Gao et al., 2023)</a></li>
+  <li><strong>动手：</strong>用 <code>FlagEmbedding</code> 库加载 BGE-Reranker，对你项目中的检索结果做一次重排，对比前后 Top-5 的变化</li>
+</ul>
+
+<div class="footer">
+<p><strong>下节预告：</strong>Function Calling / Tool Use —— 让 LLM 不再只是"说话"，而是能调用你写的 Python 函数去查数据库、算指标、发请求。这是 Agent 的基础。</p>
+</div>
+
+<div class="nav">
+  <a href="0006-rag-basics.html">← 第6课：RAG 基础</a>
+  <a href="0008-function-calling.html">下一课：Function Calling →</a>
+</div>
+
+<script>
+// 填空题
+function checkFill(el, expected, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  const ex = parent.querySelector('.quiz-explain');
+  const blank = parent.querySelector('.code-blank');
+  if (el.dataset.value === expected) {
+    el.classList.add('correct');
+    blank.textContent = expected;
+    blank.style.borderBottom = '2px solid #34d058';
+    fb.innerHTML = '✓ 正确。';
+    fb.style.color = '#22863a';
+    ex.style.display = 'block';
+    ex.innerHTML = '稠密向量通过 Embedding 将高维离散 token 空间压缩到固定维度的连续向量。这个压缩过程天然丢失了精确 token 匹配信息——"30"和"20"的语义向量在空间中非常接近，因为模型学到的是"这是一个数字条件"。BM25 补的就是这个精确词面匹配信号。';
+  } else {
+    el.classList.add('wrong');
+    blank.textContent = '?';
+    fb.innerHTML = '✗ 再想想。提示：Embedding 是降维映射，这个过程中什么信息最容易丢？';
+    fb.style.color = '#d73a49';
+    ex.style.display = 'none';
+  }
+}
+
+// 选择题
+function checkChoice(el, expected, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  const ex = parent.querySelector('.quiz-explain');
+  if (el.dataset.value === expected) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确。';
+    fb.style.color = '#22863a';
+    ex.style.display = 'block';
+    // 根据题目给出解释
+    const explains = {
+      'q2': 'Bi-Encoder 的核心优势是离线预计算文档向量 + 在线 ANN 快速召回（百万级，~5ms）。Reranker (Cross-Encoder) 的核心优势是将 query 和 doc 拼接后做完整交叉注意力，获得更精准的相关性分数，但代价是每对 query-doc 都要完整推理一次（~30-50ms）。两者是"速度 vs 精度"的分工。',
+      'q3': '50 对 × 40ms = 2000ms。控制在 500ms 内：floor(500/40) = 12 个。所以需要先通过混合检索粗排将候选从 50 压缩到 12 以内。这是两阶段检索架构的典型工程约束——精排的延迟决定了你能 rerank 多少候选。',
+      'q4': 'GraphRAG 的关键不是运行时用图（向量 RAG 也能在 metadata 中存关系）。而是在索引阶段，GraphRAG 用 LLM 预先做了实体发现、关系提取、社区检测，并为每个社区生成了摘要。这些"预计算的理解"使得 Global Query 成为可能——你问趋势类问题时，系统不需要在查询时遍历所有文档，而是直接读取社区摘要。代价就是索引阶段的大量 LLM 调用。'
+    };
+    ex.innerHTML = explains[qid] || '';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再仔细想想。';
+    fb.style.color = '#d73a49';
+    ex.style.display = 'none';
+  }
+}
+</script>
+
+</body>
+</html>
