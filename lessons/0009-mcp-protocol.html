@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第9课：MCP 协议 — 标准化工具接入</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.86em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .quiz-explain { margin-top: 0.3rem; font-size: 0.88em; color: var(--muted); display: none; }
+  .quiz-retry {
+    margin-top: 0.6rem; padding: 0.3rem 1rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: var(--muted); cursor: pointer;
+    font-size: 0.85em; display: none;
+  }
+  .quiz-retry:hover { border-color: var(--accent); color: var(--accent); }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: left; margin: 1.2rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.82em; line-height: 1.55;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem 1.2rem; border-radius: 6px; overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+</style>
+</head>
+<body>
+
+<h1>第9课：MCP —— 让工具接入有标准可循</h1>
+<p class="subtitle">你会写 Function Calling 了。但如果每个 LLM 应用都要重新写一遍工具集成代码，你会发疯的。<br>预计时间：35 分钟 &nbsp;|&nbsp; 2026-06-26</p>
+
+<h2>1. 问题：Function Calling 的"最后一公里"</h2>
+
+<p>上节课你理解了 Function Calling：Python 脚本定义工具 → LLM 输出 JSON → 你的代码执行 → 结果回送。但有个工程问题：</p>
+
+<div class="figure">
+场景：你写了 3 个可转债数据查询工具
+
+  App A (Claude Desktop)     App B (自研量化平台)      App C (LangChain Agent)
+       │                           │                         │
+       ▼                           ▼                         ▼
+  要集成你的工具             要集成你的工具             要集成你的工具
+  看不懂你的代码             看不懂你的代码             看不懂你的代码
+       │                           │                         │
+       ▼                           ▼                         ▼
+  你重写一遍集成             你又重写一遍              你再重写一遍
+</div>
+
+<p>每次换一个 LLM 客户端，你都要重新写"怎么把你的工具注册进去、怎么处理调用、怎么返回结果"这套胶水代码。</p>
+
+<p>MCP 解决的就是这个问题：<strong>定义一套标准协议，让你写一次工具服务端，任何兼容 MCP 的客户端都能直接用。</strong></p>
+
+<h2>2. MCP 架构：Client — Server</h2>
+
+<div class="figure">
+MCP 的物理布局:
+
+  ┌─────────────────────┐         ┌──────────────────────┐
+  │  MCP Client          │         │  MCP Server            │
+  │  (Claude Desktop,    │ stdio   │  (你写的 Python 脚本)   │
+  │   Cursor, 自研 App)   │◄──────►│                        │
+  │                      │  JSON   │  暴露:                  │
+  │  - 管理连接           │  RPC    │  • tools: 函数列表      │
+  │  - 发现工具           │         │  • resources: 数据源    │
+  │  - 发起调用           │         │  • prompts: 提示词模板  │
+  └─────────────────────┘         └──────────────────────┘
+</div>
+
+<p>核心是三个原语（primitives）：</p>
+
+<table>
+  <tr><th>原语</th><th>做什么</th><th>在可转债场景的例子</th></tr>
+  <tr>
+    <td><code>tools</code></td>
+    <td>可调用的函数，LLM 可以选择执行</td>
+    <td><code>query_cb_data</code>, <code>calculate_premium</code></td>
+  </tr>
+  <tr>
+    <td><code>resources</code></td>
+    <td>暴露数据给客户端读取（类似 GET 请求）</td>
+    <td><code>cb_docs://募集说明书/浦发转债.pdf</code></td>
+  </tr>
+  <tr>
+    <td><code>prompts</code></td>
+    <td>预定义的提示词模板</td>
+    <td>"分析这只转债的条款风险"模板</td>
+  </tr>
+</table>
+
+<div class="callout-strong">
+<strong>和 Function Calling 的关系：</strong>MCP 的 tools 原语 = Function Calling 的工具定义，但用标准协议暴露。Client 启动时发一个 <code>tools/list</code> 请求 → Server 返回工具列表 → Client 把这些工具注册给 LLM → LLM 做 Function Calling 决策 → Client 通过 MCP 协议把调用请求发给 Server 执行。MCP 是传输层，Function Calling 是决策层。
+</div>
+
+<h2>3. 一个可运行的 MCP Server</h2>
+
+<pre><code># cb_server.py — 可转债数据 MCP Server
+from mcp.server import Server, stdio_server
+from mcp.types import Tool, TextContent
+
+server = Server("cb-data-server")
+
+# 定义工具
+@server.list_tools()
+async def list_tools() -> list[Tool]:
+    return [
+        Tool(
+            name="query_cb_price",
+            description="查询指定可转债的当前价格和溢价率",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cb_name": {
+                        "type": "string",
+                        "description": "可转债名称或代码"
+                    }
+                },
+                "required": ["cb_name"]
+            }
+        )
+    ]
+
+# 实现工具调用
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    if name == "query_cb_price":
+        price_data = your_query_function(arguments["cb_name"])
+        return [TextContent(
+            type="text",
+            text=json.dumps(price_data, ensure_ascii=False)
+        )]
+
+# 启动
+async def main():
+    async with stdio_server() as (read, write):
+        await server.run(read, write)
+
+asyncio.run(main())</code></pre>
+
+<p>关键点：</p>
+<ul>
+  <li><code>@server.list_tools()</code> —— 告诉客户端"我有哪些工具"，等价于 Function Calling 里的 tools 数组定义</li>
+  <li><code>@server.call_tool()</code> —— 客户端通过 MCP 协议发过来的调用请求，等价于你写的 <code>if tool_name == "xxx"</code> 分支</li>
+  <li><code>stdio_server()</code> —— 通过标准输入/输出通信，客户端启动你的脚本作为子进程</li>
+</ul>
+
+<h2>4. 传输层：stdio vs SSE</h2>
+
+<table>
+  <tr><th></th><th>stdio (标准输入输出)</th><th>SSE (Server-Sent Events)</th></tr>
+  <tr><td>通信方式</td><td>父进程 ↔ 子进程，stdin/stdout 传 JSON</td><td>HTTP + 长连接推送，客户端连服务端 URL</td></tr>
+  <tr><td>适用场景</td><td>本地工具，个人使用</td><td>团队共享，远程服务</td></tr>
+  <tr><td>部署方式</td><td>客户端启动时自动拉起 Python 进程</td><td>作为常驻 HTTP 服务运行在某台机器上</td></tr>
+  <tr><td>启动复杂度</td><td>零（客户端负责启动）</td><td>需要部署服务并暴露端口</td></tr>
+</table>
+
+<div class="callout">
+<strong>实践建议：</strong>个人开发用 stdio（零部署），团队共享换 SSE。同一个 Server 代码两种传输都支持，只是启动方式不同。
+</div>
+
+<h2>5. MCP 和 Function Calling 的协作流程</h2>
+
+<p>当用户在 Claude Desktop 里问"浦发转债现在多少钱？"，完整的调用链是这样的：</p>
+
+<div class="figure">
+1. 客户端启动时: Client → tools/list → Server → 返回工具列表
+
+2. 用户提问后: Client 把工具列表 + 用户问题 → 发给 LLM
+
+3. LLM 返回: {"tool_calls": [{"name": "query_cb_price",
+                              "arguments": {"cb_name":"浦发转债"}}]}
+
+4. Client 通过 MCP: Client → tools/call → Server → 执行 query_cb_price()
+                                          → 返回 {"price": 108.5}
+
+5. Client 把结果发回 LLM → LLM 生成: "浦发转债当前 108.5 元。"
+
+关键: 第 3 步是 Function Calling，第 4 步是 MCP 协议。
+MCP 不替代 Function Calling——它规范围绕 Function Calling 的"前后步骤"。
+</div>
+
+<h2>6. 为什么 MCP 是 2026 的标准</h2>
+
+<p>不因为它是 Anthropic 提出的。因为一个简单事实：</p>
+
+<div class="callout-strong">
+<strong>类比：</strong>USB 协议出现之前，每个外设都有自己的接口。USB 之后，一个标准接口搞定键盘鼠标U盘。MCP 就是 AI 工具接入的 USB——你写一次 Server，任何 Client 都能用。没有 MCP 之前，给每个 LLM 客户端适配工具 = 给每个电脑配不同的键盘接口。
+</div>
+
+<p>2026 年数据：MCP 月下载量 97M，已注册 MCP Server 超过 2000 个。Claude Desktop、Cursor、Continue、Sourcegraph Cody 等主流 AI 工具都内置了 MCP Client。不是你需不需要学 MCP——是你不学就只能在自己写的 Python 脚本里玩 Function Calling，没法接入整个生态。</p>
+
+<h2>7. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4 — 定位辨析</h3>
+<p>MCP 协议和 Function Calling 的关系，以下哪项描述最准确？</p>
+<div class="quiz-option" data-id="q1" data-value="A" onclick="checkQuiz(this, 'C', 'q1')">A — MCP 是 Function Calling 的替代方案，两者选一个用即可不必并存</div>
+<div class="quiz-option" data-id="q1" data-value="B" onclick="checkQuiz(this, 'C', 'q1')">B — MCP 使用自己的模型推理机制完全取代了 Function Calling 流程</div>
+<div class="quiz-option" data-id="q1" data-value="C" onclick="checkQuiz(this, 'C', 'q1')">C — MCP 标准化工具的发现与调用传输，Function Calling 负责模型侧决策</div>
+<div class="quiz-option" data-id="q1" data-value="D" onclick="checkQuiz(this, 'C', 'q1')">D — MCP 只负责提示词模板管理，Function Calling 负责工具的参数填充</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+<div class="quiz-explain" id="q1-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q1')">重试</button>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4 — 流程排序</h3>
+<p>用户在 MCP 客户端中提问，以下事件发生的正确时间顺序是：① LLM 决策调哪个工具 ② Client 通过 MCP 协议向 Server 请求工具列表 ③ Server 执行函数返回结果 ④ Client 把工具定义注册进 LLM 请求</p>
+<div class="quiz-option" data-id="q2" data-value="A" onclick="checkQuiz(this, 'B', 'q2')">A — ①→②→③→④ LLM 决策最先触发随后才去获取和注册工具</div>
+<div class="quiz-option" data-id="q2" data-value="B" onclick="checkQuiz(this, 'B', 'q2')">B — ②→④→①→③ 先发现工具再注册给 LLM，LLM 决策后 Server 执行</div>
+<div class="quiz-option" data-id="q2" data-value="C" onclick="checkQuiz(this, 'B', 'q2')">C — ④→①→②→③ 先注册工具 LLM 决策后才发现 MCP Server 去调用</div>
+<div class="quiz-option" data-id="q2" data-value="D" onclick="checkQuiz(this, 'B', 'q2')">D — ②→③→①→④ 发现工具后立刻执行函数然后 LLM 再决定用哪个</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+<div class="quiz-explain" id="q2-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q2')">重试</button>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4 — 工程判断</h3>
+<p>你写了一个可转债数据 MCP Server。自己测试时用 stdio 传输，现在要分享给团队用。以下哪项是换到 SSE 传输的关键原因？</p>
+<div class="quiz-option" data-id="q3" data-value="A" onclick="checkQuiz(this, 'D', 'q3')">A — stdio 模式下工具定义的 JSON Schema 校验不够严格易出错</div>
+<div class="quiz-option" data-id="q3" data-value="B" onclick="checkQuiz(this, 'D', 'q3')">B — SSE 传输速度比 stdio 快 10 倍以上适合生产环境使用</div>
+<div class="quiz-option" data-id="q3" data-value="C" onclick="checkQuiz(this, 'D', 'q3')">C — stdio 模式不支持 tools、resources、prompts 三个原语</div>
+<div class="quiz-option" data-id="q3" data-value="D" onclick="checkQuiz(this, 'D', 'q3')">D — stdio 要求 Server 作为客户端子进程启动，团队共享需独立部署的服务</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+<div class="quiz-explain" id="q3-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q3')">重试</button>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4 — 设计判断</h3>
+<p>同事说"我们不需要 MCP，直接用 Function Calling 就够了"。以下哪种场景下他的话不成立？</p>
+<div class="quiz-option" data-id="q4" data-value="A" onclick="checkQuiz(this, 'C', 'q4')">A — 只在一个 Python 脚本中使用 LLM 调用自己定义的几个本地工具</div>
+<div class="quiz-option" data-id="q4" data-value="B" onclick="checkQuiz(this, 'C', 'q4')">B — 工具逻辑极其简单仅涉及字符串处理无需外部数据查询</div>
+<div class="quiz-option" data-id="q4" data-value="C" onclick="checkQuiz(this, 'C', 'q4')">C — 需要让同一套工具被多个不同的 LLM 客户端发现和使用而避免重复集成</div>
+<div class="quiz-option" data-id="q4" data-value="D" onclick="checkQuiz(this, 'C', 'q4')">D — 所有工具调用都是串行依赖关系无法利用并行优化减少延迟</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+<div class="quiz-explain" id="q4-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q4')">重试</button>
+</div>
+
+<h2>8. 延伸阅读</h2>
+<ul>
+  <li><strong>协议规范：</strong><a href="https://modelcontextprotocol.io/specification" target="_blank">MCP Specification (modelcontextprotocol.io)</a> — 官方协议文档，含所有原语定义</li>
+  <li><strong>Python SDK：</strong><a href="https://github.com/modelcontextprotocol/python-sdk" target="_blank">MCP Python SDK (GitHub)</a> — 写 MCP Server 的官方库</li>
+  <li><strong>动手：</strong>把你第 8 课写的可转债查询工具包装成一个 MCP Server，在 Claude Desktop 中配置并在对话中调用</li>
+</ul>
+
+<div class="footer">
+<p><strong>下节预告：</strong>Agent 设计模式 —— ReAct / Plan-and-Execute / 单Agent vs 多Agent。有了 Function Calling + MCP 的工具接入，下一步是让模型自主规划"用哪些工具、按什么顺序"。</p>
+<p style="margin-top:0.8rem;">有任何疑问？直接在对话中提，老师会帮你理清楚。</p>
+</div>
+
+<div class="nav">
+  <a href="0008-function-calling.html">← 第8课：Function Calling</a>
+  <a href="0010-agent-patterns.html">下一课：Agent 设计模式 →</a>
+</div>
+
+<script>
+function checkQuiz(el, expected, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  const ex = parent.querySelector('.quiz-explain');
+  const retry = parent.querySelector('.quiz-retry');
+  if (el.dataset.value === expected) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确。';
+    fb.style.color = '#22863a';
+    ex.style.display = 'block';
+    const explains = {
+      'q1': 'MCP 和 Function Calling 是互补关系，不是替代关系。MCP 解决的是"工具怎么被发现、怎么被调用、结果怎么传回来"的传输标准化问题；Function Calling 解决的是"LLM 怎么决定要不要用工具、用哪个、传什么参数"的决策问题。两者各管一层。',
+      'q2': '完整流程：客户端启动 → 向 MCP Server 请求工具列表(tools/list) → 拿到工具定义 → 用户提问时把工具定义注册进 LLM 请求中 → LLM 决策要调哪个工具 → Client 通过 MCP tools/call 发给 Server → Server 执行函数返回结果。即 ②→④→①→③。',
+      'q3': 'stdio 的核心限制是 Server 作为客户端子进程存在——只有启动它的客户端能用。SSE 模式下 Server 是独立 HTTP 服务，任何知道 URL 的客户端都可以连接，这是团队共享的基础。',
+      'q4': 'A 场景（单脚本、自己用、工具少）直接用 Function Calling 确实够了，不需要 MCP。C 场景——需要同一套工具让多个不同 LLM 客户端使用——才是 MCP 的核心价值所在。直接 Function Calling 意味着每换一个客户端就要重写集成代码。'
+    };
+    ex.innerHTML = explains[qid] || '';
+    retry.style.display = 'inline-block';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再仔细想想。';
+    fb.style.color = '#d73a49';
+    ex.style.display = 'none';
+    retry.style.display = 'inline-block';
+  }
+}
+
+function resetQuiz(btn, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'auto';
+  });
+  parent.querySelector('.quiz-feedback').innerHTML = '';
+  parent.querySelector('.quiz-explain').style.display = 'none';
+  btn.style.display = 'none';
+}
+</script>
+
+</body>
+</html>

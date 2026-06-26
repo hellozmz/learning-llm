@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第8课：Function Calling / Tool Use —— 让模型"动手"</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.86em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .quiz-explain { margin-top: 0.3rem; font-size: 0.88em; color: var(--muted); display: none; }
+  .quiz-retry {
+    margin-top: 0.6rem; padding: 0.3rem 1rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: var(--muted); cursor: pointer;
+    font-size: 0.85em; display: none;
+  }
+  .quiz-retry:hover { border-color: var(--accent); color: var(--accent); }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: left; margin: 1.2rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.82em; line-height: 1.55;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem 1.2rem; border-radius: 6px; overflow-x: auto;
+  }
+  .figure-label { font-size: 0.8em; color: var(--muted); margin-top: 0.3rem; text-align: center; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+  .loop-svg { text-align: center; margin: 1.2rem 0; }
+  .loop-svg svg { max-width: 100%; }
+</style>
+</head>
+<body>
+
+<h1>第8课：Function Calling / Tool Use</h1>
+<p class="subtitle">模型不是只能"说话"——它可以选择调用什么函数、传什么参数。但注意：执行代码的是你，不是模型。<br>预计时间：40 分钟 &nbsp;|&nbsp; 2026-06-26</p>
+
+<h2>1. 最关键的澄清：模型并不"调用"函数</h2>
+
+<p>"Function Calling"这个名字有误导性。模型没有执行任何代码——它做的事情非常朴素：</p>
+
+<div class="figure">
+Function Calling 的真相:
+
+  用户问: "沪深300今天涨了多少？"
+       ↓
+  LLM 输出:  stop_reason: "tool_use"
+            { "name": "get_stock_price",
+              "arguments": { "index": "沪深300", "field": "change_pct" } }
+       ↓
+  <strong>你的代码</strong> 解析这个 JSON → 调用真正的 get_stock_price() → 拿到结果
+       ↓
+  把结果拼回消息列表 → 再次请求 LLM
+       ↓
+  LLM 输出:  "沪深300今日上涨0.82%。"
+</div>
+
+<div class="callout-strong">
+<strong>核心认知：</strong>Function Calling 本质上是"模型输出了特定格式的 JSON，而不是自然语言"。你写的代码是执行者、决策者和安全边界。模型只是建议"我可能需要这个工具、用这些参数"，最终是否执行、怎么执行，完全由你的应用层控制。
+</div>
+
+<h2>2. 工具定义：你告诉模型"能做什么"</h2>
+
+<p>模型不是天生知道你有什么工具。你需要用 JSON Schema 格式描述每个工具：</p>
+
+<pre><code># 一个可转债数据查询工具的定义（OpenAI 兼容格式）
+tools = [
+  {
+    "type": "function",
+    "function": {
+      "name": "query_cb_data",
+      "description": "查询可转债的行情数据和条款信息。输入转债代码或名称，返回价格/溢价率/条款触发状态。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cb_name": {
+            "type": "string",
+            "description": "可转债名称或代码，如'浦发转债'或'110059'"
+          },
+          "data_type": {
+            "type": "string",
+            "enum": ["price", "premium_rate", "clause_status", "all"],
+            "description": "要查询的数据类型"
+          }
+        },
+        "required": ["cb_name"]
+      }
+    }
+  }
+]</code></pre>
+
+<p>模型怎么"学会"使用这个工具？不是微调，也不是训练——就是靠 <strong>System Prompt 里的工具描述 + 指令微调阶段的 tool-use 训练</strong>。模型在预训练时见过大量 API 调用格式的文本，推理时你把工具定义放进请求里，它就能产出符合格式的 JSON。</p>
+
+<h2>3. 工具描述的工程要点</h2>
+
+<p>写好工具描述和写 prompt 一样，有坑：</p>
+
+<table>
+  <tr><th>原则</th><th>坏的描述</th><th>好的描述</th></tr>
+  <tr>
+    <td>说清楚"什么时候用"</td>
+    <td>"查询数据"</td>
+    <td>"当用户问到可转债的实时价格、溢价率或条款触发状态时使用"</td>
+  </tr>
+  <tr>
+    <td>参数名要直观</td>
+    <td><code>param1: string</code></td>
+    <td><code>cb_name: string — 可转债名称或代码</code></td>
+  </tr>
+  <tr>
+    <td>enum 限制可选值</td>
+    <td><code>"type": "string"</code></td>
+    <td><code>"enum": ["price","premium_rate","clause_status"]</code></td>
+  </tr>
+  <tr>
+    <td>给出参数示例</td>
+    <td>无</td>
+    <td><code>"如 cb_name='浦发转债', data_type='price'"</code></td>
+  </tr>
+  <tr>
+    <td>明确约束边界</td>
+    <td>无</td>
+    <td><code>"仅用于查询已有数据，不执行任何修改操作"</code></td>
+  </tr>
+</table>
+
+<div class="callout-danger">
+<strong>安全红线：</strong>永远不要把 <code>execute_sql(raw_query)</code> 这样的工具暴露给模型。模型不知道你的表结构（它猜的）、不知道索引（它不管）、不知道你到底有没有 DELETE 权限。正确做法是把每个查询封装成独立的、参数类型明确的具体函数——"数据库查询"不是一个工具，是五十个工具。
+</div>
+
+<h2>4. 完整对话循环</h2>
+
+<p>一次 Function Calling 的完整消息序列：</p>
+
+<pre><code># Round 1: 用户提问 → 模型决定调用工具
+messages = [
+  {"role": "system", "content": "你是可转债分析助手..."},
+  {"role": "user",   "content": "浦发转债现在溢价率多少？接近强赎触发吗？"}
+]
+
+response = client.chat.completions.create(
+  model="gpt-4o", messages=messages, tools=tools
+)
+# response.choices[0].finish_reason == "tool_calls"
+# response.choices[0].message.tool_calls = [{
+#   "function": {"name": "query_cb_data",
+#                "arguments": '{"cb_name":"浦发转债","data_type":"all"}'}
+# }]
+
+# Round 2: 你的代码执行函数，结果追加到消息列表
+tool_result = query_cb_data("浦发转债", "all")
+# → {"price": 108.5, "premium_rate": 0.23, "clause": {"强赎": "未触发"}}
+
+messages.append(response.choices[0].message)  # 模型的 tool_call 消息
+messages.append({
+  "role": "tool",
+  "tool_call_id": response.choices[0].message.tool_calls[0].id,
+  "content": json.dumps(tool_result)
+})
+
+# Round 3: 模型拿到结果，生成最终回答
+response = client.chat.completions.create(
+  model="gpt-4o", messages=messages
+)
+# → "浦发转债当前价格108.5元，溢价率23%。目前未触发强赎条款..."</code></pre>
+
+<div class="callout">
+<strong>关键细节：</strong>Round 2 中 model 的 tool_call 消息和 role="tool" 的结果消息都必须追加。这和在 prompt 里手工拼"检索到的文档是..."完全不同——<strong>模型在训练时就被教过"tool_calls → tool 结果 → 最终回答"这个消息格式</strong>，它知道怎么用。
+</div>
+
+<h2>5. 多工具场景：模型怎么选</h2>
+
+<p>当你提供了 10 个工具，模型需要决定：用哪个（或哪几个）、什么顺序、传什么参数。</p>
+
+<div class="figure">
+用户问: "比较一下浦发转债和中信转债的溢价率，哪个更低？"
+
+模型可能的决策路径:
+  1. 识别需要"溢价率"数据 → 选 query_cb_data
+  2. 识别需要两个转债的数据 → 并行调用两次 query_cb_data
+     (不同 cb_name，相同 data_type="premium_rate")
+
+或者:
+  1. 识别"溢价率"是计算型问题 → 选 get_premium_rate("浦发转债")
+  2. 再选 get_premium_rate("中信转债")
+  3. 如果结果已经有了，直接生成答案
+</div>
+
+<p>模型做这个决策靠的是：<strong>每层 Transformer 对工具定义文本的注意力</strong>。如果你在工具描述里写了"用于查询个别转债的溢价率"，模型就不会尝试用它查"所有转债"。如果你写了"支持批量查询"，模型可能会一次传多个参数。</p>
+
+<p>工具描述就是模型"理解工具"的唯一入口。没有别的。</p>
+
+<h2>6. 并行工具调用</h2>
+
+<p>多个互不依赖的工具调用可以并行发出——这是降低延迟的关键设计：</p>
+
+<pre><code># 模型可以一次返回多个 tool_calls
+response.choices[0].message.tool_calls = [
+  {"function": {"name": "query_cb_data", "arguments": '{"cb_name":"浦发转债","data_type":"price"}'}},
+  {"function": {"name": "query_cb_data", "arguments": '{"cb_name":"中信转债","data_type":"price"}'}},
+  {"function": {"name": "get_market_index", "arguments": '{"index":"中证转债"}'}}
+]
+
+# 三个查询不互相依赖 → 可以并发执行
+import concurrent.futures
+with concurrent.futures.ThreadPoolExecutor() as executor:
+    results = list(executor.map(execute_tool, tool_calls))</code></pre>
+
+<table>
+  <tr><th>场景</th><th>串行延迟</th><th>并行延迟</th></tr>
+  <tr><td>3 个独立 API 查询（每个 200ms）</td><td>600ms</td><td>200ms</td></tr>
+  <tr><td>先查条款 → 再根据条款结果决定下一步</td><td>400ms（必须串行）</td><td>无法并行</td></tr>
+</table>
+
+<div class="callout-strong">
+<strong>工程判断：</strong>不是所有调用都能并行。模型会区分"需要等上一个结果"和"独立查询"。如果模型连续两次请求都做了 tool_calls，说明第一轮的结果影响了第二轮的选择——这是依赖关系，不能强行并行化。
+</div>
+
+<h2>7. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4 — 概念辨析</h3>
+<p>下面关于 Function Calling 的描述，哪一个是正确的？</p>
+<div class="quiz-option" data-id="q1" data-value="A" onclick="checkQuiz(this, 'D', 'q1')">A — 模型在推理时会实际调用你注册的函数并获取执行结果</div>
+<div class="quiz-option" data-id="q1" data-value="B" onclick="checkQuiz(this, 'D', 'q1')">B — 模型通过微调学会了执行你代码中定义的 Python 函数</div>
+<div class="quiz-option" data-id="q1" data-value="C" onclick="checkQuiz(this, 'D', 'q1')">C — 模型读取函数源码后在其内部沙箱中模拟运行结果</div>
+<div class="quiz-option" data-id="q1" data-value="D" onclick="checkQuiz(this, 'D', 'q1')">D — 模型生成一个结构化 JSON 输出，应用代码解析后决定是否执行</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+<div class="quiz-explain" id="q1-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q1')">重试</button>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4 — 工具设计判断</h3>
+<p>你为可转债系统定义了两个工具。用户问"哪些银行转债的溢价率低于15%"，模型只调用了 <code>query_cb_list</code> 但没有调用 <code>calculate_premium</code>，最终给出了错误的答案。以下哪项最可能是根因？</p>
+<div class="quiz-option" data-id="q2" data-value="A" onclick="checkQuiz(this, 'C', 'q2')">A — 模型的工具选择算法有 bug，需升级到更新的模型版本</div>
+<div class="quiz-option" data-id="q2" data-value="B" onclick="checkQuiz(this, 'C', 'q2')">B — 系统提供的工具数量过多导致模型选择困难而漏调</div>
+<div class="quiz-option" data-id="q2" data-value="C" onclick="checkQuiz(this, 'C', 'q2')">C — calculate_premium 的描述让模型误判它不适用于筛选举例场景</div>
+<div class="quiz-option" data-id="q2" data-value="D" onclick="checkQuiz(this, 'C', 'q2')">D — Function Calling 模式下模型只能选择唯一的一个工具执行</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+<div class="quiz-explain" id="q2-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q2')">重试</button>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4 — 循环判断</h3>
+<p>考虑以下消息序列。哪一轮消息组合是 Function Calling 中<strong>必须</strong>按顺序出现的？（role 标记：user / assistant(tool_calls) / tool / assistant）</p>
+<div class="quiz-option" data-id="q3" data-value="A" onclick="checkQuiz(this, 'B', 'q3')">A — user → tool → assistant → assistant 三个角色即可完成闭环</div>
+<div class="quiz-option" data-id="q3" data-value="B" onclick="checkQuiz(this, 'B', 'q3')">B — user → assistant(tool_calls) → tool → assistant 缺一不可</div>
+<div class="quiz-option" data-id="q3" data-value="C" onclick="checkQuiz(this, 'B', 'q3')">C — user → tool → user → assistant 两次 user 保证参数正确</div>
+<div class="quiz-option" data-id="q3" data-value="D" onclick="checkQuiz(this, 'B', 'q3')">D — system → tool → assistant → user 从 system 直接跳工具调用</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+<div class="quiz-explain" id="q3-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q3')">重试</button>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4 — 安全设计</h3>
+<p>以下哪个工具定义最可能造成安全问题，不应该暴露给 LLM？</p>
+<div class="quiz-option" data-id="q4" data-value="A" onclick="checkQuiz(this, 'C', 'q4')">A — 根据转债名称返回该转债的实时价格和溢价率等行情数据</div>
+<div class="quiz-option" data-id="q4" data-value="B" onclick="checkQuiz(this, 'C', 'q4')">B — 根据日期范围返回该时段内的转债市场涨跌统计汇总</div>
+<div class="quiz-option" data-id="q4" data-value="C" onclick="checkQuiz(this, 'C', 'q4')">C — 接收 SQL 查询语句并直接在转债数据库中执行以返回任意结果</div>
+<div class="quiz-option" data-id="q4" data-value="D" onclick="checkQuiz(this, 'C', 'q4')">D — 根据用户指定的筛选条件从数据库检索匹配的转债列表</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+<div class="quiz-explain" id="q4-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q4')">重试</button>
+</div>
+
+<h2>8. 延伸阅读</h2>
+<ul>
+  <li><strong>必读文档：</strong><a href="https://platform.openai.com/docs/guides/function-calling" target="_blank">OpenAI Function Calling Guide</a> — 官方文档，含最佳实践和参数设计原则</li>
+  <li><strong>开源实现：</strong><a href="https://github.com/openai/openai-cookbook/blob/main/examples/How_to_call_functions_with_chat_models.ipynb" target="_blank">OpenAI Cookbook: Function Calling</a> — 完整代码示例</li>
+  <li><strong>动手：</strong>用你项目中已有的可转债数据查询函数，包装成 Function Calling 工具，让 LLM 通过自然语言触发数据查询</li>
+</ul>
+
+<div class="footer">
+<p><strong>下节预告：</strong>MCP 协议 —— Function Calling 解决了"单个应用内"的工具调用，MCP 解决的是"不同应用间"的工具标准化接入。2026 年 MCP 已是 AI Agent 工具接入的事实标准。</p>
+<p style="margin-top:0.8rem;">有问题？直接在对话中输入你的疑问，老师会帮你解答。</p>
+</div>
+
+<div class="nav">
+  <a href="0007-rag-advanced.html">← 第7课：RAG 进阶</a>
+  <a href="0009-mcp-protocol.html">下一课：MCP 协议 →</a>
+</div>
+
+<script>
+function checkQuiz(el, expected, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  const ex = parent.querySelector('.quiz-explain');
+  const retry = parent.querySelector('.quiz-retry');
+  if (el.dataset.value === expected) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确。';
+    fb.style.color = '#22863a';
+    ex.style.display = 'block';
+    const explains = {
+      'q1': '"模型调用函数"是业界惯用语但容易误解。实际上模型只输出 JSON 文本（如 {"name": "get_price", "arguments": "..."}），你的代码解析 JSON、执行函数、把结果发回。这跟"模型写出了代码，你复制到终端运行"是同样的关系。',
+      'q2': '工具描述是模型判断"该不该用这个工具"的唯一依据。如果 calculate_premium 的描述写的是"计算单只转债的理论溢价率"，模型可能认为它不适用于"筛选多只转债"的场景。修正方法：把描述改成"计算单只或多只转债的溢价率，可用于筛选和对比"。',
+      'q3': '完整的 tool calling 循环: user 消息触发 → assistant 返回 tool_calls → tool 角色返回执行结果 → assistant 生成最终回答。tool 角色的消息必须在 assistant(tool_calls) 之后，否则模型不知道你在响应哪个调用。',
+      'q4': '直接暴露 SQL 执行是最常见也最危险的反模式。模型可能生成 DROP TABLE、可能注入恶意指令、可能查询不该查的表。正确做法：每个查询封装为独立工具，参数约束用 enum/type 限定，实现对数据库的安全抽象。'
+    };
+    ex.innerHTML = explains[qid] || '';
+    retry.style.display = 'inline-block';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再仔细想想。';
+    fb.style.color = '#d73a49';
+    ex.style.display = 'none';
+    retry.style.display = 'inline-block';
+  }
+}
+
+function resetQuiz(btn, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'auto';
+  });
+  parent.querySelector('.quiz-feedback').innerHTML = '';
+  parent.querySelector('.quiz-explain').style.display = 'none';
+  btn.style.display = 'none';
+}
+</script>
+
+</body>
+</html>

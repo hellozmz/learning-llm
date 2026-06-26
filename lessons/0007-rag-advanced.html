@@ -59,6 +59,13 @@
   .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
   .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
   .quiz-explain { margin-top: 0.3rem; font-size: 0.88em; color: var(--muted); display: none; }
+  .quiz-retry {
+    margin-top: 0.6rem; padding: 0.3rem 1rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: var(--muted); cursor: pointer;
+    font-size: 0.85em; display: none;
+  }
+  .quiz-retry:hover { border-color: var(--accent); color: var(--accent); }
   .code-blank {
     display: inline-block; width: 120px; border-bottom: 2px solid var(--accent);
     text-align: center; font-family: "SF Mono", monospace; padding: 0 0.3em;
@@ -387,6 +394,7 @@ D. 向量归一化操作将所有文档映射到同一超球面上</pre>
 <div class="quiz-option" data-id="q1" data-value="D" data-code="D" onclick="checkFill(this, 'B', 'q1')">D — 稠密向量归一化后只保留方向信息而舍弃了标量的绝对大小</div>
 <div class="quiz-feedback" id="q1-fb"></div>
 <div class="quiz-explain" id="q1-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q1')">重试</button>
 </div>
 
 <div class="quiz" id="q2">
@@ -398,6 +406,7 @@ D. 向量归一化操作将所有文档映射到同一超球面上</pre>
 <div class="quiz-option" data-id="q2" data-value="D" onclick="checkChoice(this, 'B', 'q2')">D — Bi-Encoder 负责短查询处理，Reranker 负责长文档的全文交叉注意力编码</div>
 <div class="quiz-feedback" id="q2-fb"></div>
 <div class="quiz-explain" id="q2-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q2')">重试</button>
 </div>
 
 <div class="quiz" id="q3">
@@ -409,6 +418,7 @@ D. 向量归一化操作将所有文档映射到同一超球面上</pre>
 <div class="quiz-option" data-id="q3" data-value="D" onclick="checkChoice(this, 'C', 'q3')">D — 总延迟 400ms，最多 rerank 12 个候选以控制在 500ms 内</div>
 <div class="quiz-feedback" id="q3-fb"></div>
 <div class="quiz-explain" id="q3-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q3')">重试</button>
 </div>
 
 <div class="quiz" id="q4">
@@ -420,6 +430,7 @@ D. 向量归一化操作将所有文档映射到同一超球面上</pre>
 <div class="quiz-option" data-id="q4" data-value="D" onclick="checkChoice(this, 'D', 'q4')">D — GraphRAG 在索引阶段用 LLM 预计算实体关系与社区摘要以支持全局查询</div>
 <div class="quiz-feedback" id="q4-fb"></div>
 <div class="quiz-explain" id="q4-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q4')">重试</button>
 </div>
 
 <h2>7. 延伸阅读</h2>
@@ -449,6 +460,7 @@ function checkFill(el, expected, qid) {
   });
   const fb = parent.querySelector('.quiz-feedback');
   const ex = parent.querySelector('.quiz-explain');
+  const retry = parent.querySelector('.quiz-retry');
   const blank = parent.querySelector('.code-blank');
   if (el.dataset.value === expected) {
     el.classList.add('correct');
@@ -458,12 +470,14 @@ function checkFill(el, expected, qid) {
     fb.style.color = '#22863a';
     ex.style.display = 'block';
     ex.innerHTML = '稠密向量通过 Embedding 将高维离散 token 空间压缩到固定维度的连续向量。这个压缩过程天然丢失了精确 token 匹配信息——"30"和"20"的语义向量在空间中非常接近，因为模型学到的是"这是一个数字条件"。BM25 补的就是这个精确词面匹配信号。';
+    retry.style.display = 'inline-block';
   } else {
     el.classList.add('wrong');
     blank.textContent = '?';
     fb.innerHTML = '✗ 再想想。提示：Embedding 是降维映射，这个过程中什么信息最容易丢？';
     fb.style.color = '#d73a49';
     ex.style.display = 'none';
+    retry.style.display = 'inline-block';
   }
 }
 
@@ -476,23 +490,42 @@ function checkChoice(el, expected, qid) {
   });
   const fb = parent.querySelector('.quiz-feedback');
   const ex = parent.querySelector('.quiz-explain');
+  const retry = parent.querySelector('.quiz-retry');
   if (el.dataset.value === expected) {
     el.classList.add('correct');
     fb.innerHTML = '✓ 正确。';
     fb.style.color = '#22863a';
     ex.style.display = 'block';
-    // 根据题目给出解释
     const explains = {
       'q2': 'Bi-Encoder 的核心优势是离线预计算文档向量 + 在线 ANN 快速召回（百万级，~5ms）。Reranker (Cross-Encoder) 的核心优势是将 query 和 doc 拼接后做完整交叉注意力，获得更精准的相关性分数，但代价是每对 query-doc 都要完整推理一次（~30-50ms）。两者是"速度 vs 精度"的分工。',
       'q3': '50 对 × 40ms = 2000ms。控制在 500ms 内：floor(500/40) = 12 个。所以需要先通过混合检索粗排将候选从 50 压缩到 12 以内。这是两阶段检索架构的典型工程约束——精排的延迟决定了你能 rerank 多少候选。',
       'q4': 'GraphRAG 的关键不是运行时用图（向量 RAG 也能在 metadata 中存关系）。而是在索引阶段，GraphRAG 用 LLM 预先做了实体发现、关系提取、社区检测，并为每个社区生成了摘要。这些"预计算的理解"使得 Global Query 成为可能——你问趋势类问题时，系统不需要在查询时遍历所有文档，而是直接读取社区摘要。代价就是索引阶段的大量 LLM 调用。'
     };
     ex.innerHTML = explains[qid] || '';
+    retry.style.display = 'inline-block';
   } else {
     el.classList.add('wrong');
     fb.innerHTML = '✗ 再仔细想想。';
     fb.style.color = '#d73a49';
     ex.style.display = 'none';
+    retry.style.display = 'inline-block';
+  }
+}
+
+// 重置题目
+function resetQuiz(btn, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'auto';
+  });
+  parent.querySelector('.quiz-feedback').innerHTML = '';
+  parent.querySelector('.quiz-explain').style.display = 'none';
+  btn.style.display = 'none';
+  const blank = parent.querySelector('.code-blank');
+  if (blank) {
+    blank.textContent = '?';
+    blank.style.borderBottom = '2px solid var(--accent)';
   }
 }
 </script>
