@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第11课：Eval + 可观测性</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.86em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .quiz-explain { margin-top: 0.3rem; font-size: 0.88em; color: var(--muted); display: none; }
+  .quiz-retry {
+    margin-top: 0.6rem; padding: 0.3rem 1rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: var(--muted); cursor: pointer;
+    font-size: 0.85em; display: none;
+  }
+  .quiz-retry:hover { border-color: var(--accent); color: var(--accent); }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: left; margin: 1.2rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.82em; line-height: 1.55;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem 1.2rem; border-radius: 6px; overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+</style>
+</head>
+<body>
+
+<h1>第11课：Eval + 可观测性</h1>
+<p class="subtitle">Agent 上线后，你怎么知道它在正常工作？模型不会"准确率 95%"这样直白地告诉你，你得自己造尺子。<br>预计时间：40 分钟 &nbsp;|&nbsp; 2026-06-29</p>
+
+<h2>1. 为什么传统 ML 的评估不够用</h2>
+
+<p>在传统 ML（包括你做的可转债 LightGBM 模型）里，评估是直接的：拿一个测试集，跑一遍，算 MAE / F1 / AUC。结果是一个数，比模型版本之间谁高谁低就行。</p>
+
+<p>LLM 评估的难点是：输出是非结构化文本。"浦发转债当前溢价率 8.3%，建议持有"和"溢价率 8.3 个百分点，可继续持仓"——这两个答案都对，但你没法用 exact match 评判。更糟的是，模型有时会编造数字、漏掉关键步骤、引用错误的文档段落。</p>
+
+<div class="callout">
+<strong>核心问题：</strong>LLM 评估需要回答三类问题——<strong>事实对不对</strong>（faithfulness）、<strong>回答切题不切题</strong>（relevance）、<strong>流程对不对</strong>（agent 工具选择）。每一类都需要不同的评估方法。
+</div>
+
+<h2>2. 离线评估：构造 Golden Set</h2>
+
+<p>离线评估的本质是：你预先准备一批 (输入, 期望输出) 对，每次模型或 prompt 改动后跑一遍，看输出和期望的吻合度。关键不在算法，在数据。</p>
+
+<h3>Golden Set 怎么构造</h3>
+
+<div class="figure">
+三个层次，从易到难：
+
+1. 简单事实题 (50 条)
+   Q: "浦发转债的到期日是？"
+   A: "2027-03-31"  ← 唯一正确答案，exact match
+
+2. 推理题 (30 条)
+   Q: "浦发转债当前溢价率 8%，正股 MA20 上行，
+       距到期 18 月，未触发强赎。按双低策略该怎么操作？"
+   A: 关键点必须包含: "买入" + "溢价率低" + "正股趋势配合"
+   ← 用 LLM-as-judge 评分
+
+3. 边界题 (20 条)
+   Q: "浦发转债溢价率 50%，正股已退市风险，
+       距到期 1 月，已公告强赎。"
+   A: 关键点: "止损" + "高溢价风险" + "强赎避险"
+   ← 测试模型在极端场景的判断
+</div>
+
+<p>每条 golden 样本除了 (Q, A) 外，还要标注<strong>关键事实点</strong>——答案中必须出现的实体、数字、结论。这些点用来做自动评分。</p>
+
+<h2>3. LLM-as-Judge：用模型评模型</h2>
+
+<p>exact match 只能判简单事实题。对推理题和边界题，你需要一个能理解语义的评分器。最实用的方案是用一个更强的模型（Claude Opus / GPT-4）当评委。</p>
+
+<pre><code>JUDGE_PROMPT = """你是一个严格的评分员。下面是用户问题、参考答案、模型输出。
+请按三个维度打分（0-2 分）：
+
+1. 事实正确性 (factuality): 模型输出的事实是否和参考答案一致
+   - 0: 有错误事实
+   - 1: 事实正确但不完整
+   - 2: 事实完全正确
+
+2. 推理质量 (reasoning): 推理链是否合理
+   - 0: 推理缺失或有逻辑错误
+   - 1: 推理存在但跳跃
+   - 2: 推理清晰且严密
+
+3. 完整性 (completeness): 是否覆盖参考答案所有关键点
+   - 0: 漏掉主要结论
+   - 1: 漏掉次要细节
+   - 2: 全部覆盖
+
+输出 JSON: {"factuality": 0-2, "reasoning": 0-2, "completeness": 0-2, "issues": "..."}
+
+用户问题: {question}
+参考答案: {reference}
+模型输出: {prediction}"""
+
+def llm_judge(question, reference, prediction):
+    resp = client.messages.create(
+        model="claude-opus-4-6",
+        system=JUDGE_PROMPT,
+        messages=[{"role": "user", "content": f"Q: {question}\nRef: {reference}\nPred: {prediction}"}],
+    )
+    return json.loads(resp.content[0].text)</code></pre>
+
+<div class="callout-danger">
+<strong>LLM-as-judge 的三个坑：</strong>
+<br>1. <strong>位置偏置</strong>：评委倾向于给"第一个出现的答案"更高分。解法：随机打乱顺序跑两次取平均。
+<br>2. <strong>长度偏置</strong>：评委倾向于给更长的输出更高分（看起来更"用心"）。解法：在 prompt 里明确"长度不影响评分"，并限制输出字数。
+<br>3. <strong>自我偏好</strong>：用 Claude 评 Claude 输出会偏高。解法：跨模型评（用 GPT-4 评 Claude，反之亦然）。
+</div>
+
+<h2>4. RAG 专项评估：Ragas 框架</h2>
+
+<p>对 RAG 系统的评估有标准化框架，最常用的是 <strong>Ragas</strong>。它把 RAG 拆成四个维度，每个维度有专门的评估方法：</p>
+
+<table>
+  <tr><th>维度</th><th>测什么</th><th>评估方法</th></tr>
+  <tr>
+    <td>Faithfulness（忠实度）</td>
+    <td>答案是否基于检索到的文档，没有编造</td>
+    <td>把答案拆成句子，每句验证能否在 context 中找到支撑</td>
+  </tr>
+  <tr>
+    <td>Answer Relevance</td>
+    <td>答案是否回应了用户问题</td>
+    <td>从答案反推可能的问题，和原问题计算相似度</td>
+  </tr>
+  <tr>
+    <td>Context Precision</td>
+    <td>检索到的文档里有多少是真正相关的</td>
+    <td>对每个 retrieved chunk 标注是否相关，算 precision</td>
+  </tr>
+  <tr>
+    <td>Context Recall</td>
+    <td>答案需要的信息有多少被检索到了</td>
+    <td>把参考答案拆成事实点，验证每个点是否在 context 中</td>
+  </tr>
+</table>
+
+<div class="figure">
+Faithfulness 评估的具体做法：
+
+答案: "浦发转债溢价率 8.3%，到期日 2027-03-31"
+  ↓ 拆成原子陈述
+  陈述1: "浦发转债溢价率 8.3%"
+  陈述2: "浦发转债到期日 2027-03-31"
+  ↓ 对每个陈述，让 LLM 验证 context 中是否有支撑
+  Context: "...浦发转债当前价格 105.2，溢价率 8.3%..."
+    → 陈述1 有支撑 ✓
+    → 陈述2 无支撑 ✗ (context 里没提到期日)
+  ↓
+Faithfulness = 1/2 = 0.5
+
+关键: 忠实度低 = 模型在编造，这是 RAG 最致命的失败模式
+</div>
+
+<h2>5. Agent 专项评估：工具选择准确率</h2>
+
+<p>Agent 的评估比 RAG 更复杂，因为多了"决策"这一层。你需要评估的不只是最终答案，还有中间过程。</p>
+
+<h3>三个层次的 Agent 评估</h3>
+
+<div class="figure">
+层次1: 工具选择准确率 (Tool Selection Accuracy)
+  - 给定一个问题，模型选对了哪个工具？
+  - 需要 golden trace: "这个问题应该先调 A 再调 B"
+  - 准确率 = 选对的步骤数 / 总步骤数
+
+层次2: 参数正确率 (Parameter Accuracy)
+  - 选对工具后，参数对不对？
+  - "浦发转债" vs "浦发银行转债" vs "浦发转债(SH110062)"
+  - 用模糊匹配或 exact match
+
+层次3: 端到端任务完成率 (Task Success)
+  - 最终答案是否解决了用户问题？
+  - 二元判定（成功/失败）或 1-5 分打分
+</div>
+
+<pre><code>def evaluate_agent_trace(trace, golden_trace):
+    """trace: 实际运行记录, golden_trace: 预期路径"""
+    tool_acc = 0
+    param_acc = 0
+    n = min(len(trace), len(golden_trace))
+
+    for i in range(n):
+        actual = trace[i]
+        expected = golden_trace[i]
+
+        if actual.tool_name == expected.tool_name:
+            tool_acc += 1
+            # 工具选对后再看参数
+            if param_match(actual.args, expected.args):
+                param_acc += 1
+
+    return {
+        "tool_accuracy": tool_acc / len(golden_trace),
+        "param_accuracy": param_acc / max(tool_acc, 1),
+        "step_count_match": len(trace) == len(golden_trace),
+    }</code></pre>
+
+<div class="callout-strong">
+<strong>Agent 评估的难点：</strong>同一个问题可能有不同的合法路径——比如先查价格再查评级，或先查评级再查价格，都对。Golden trace 不能只存一条路径，要存一个"合法路径集合"。这比 RAG 评估要复杂得多。
+</div>
+
+<h2>6. 在线可观测性：Trace 和 Metrics</h2>
+
+<p>离线评估告诉你"模型能力有没有变化"，在线可观测性告诉你"现在线上发生了什么"。两者不可替代。</p>
+
+<h3>Trace：每次调用的完整链路</h3>
+
+<div class="figure">
+一次 Agent 调用的 trace：
+
+[trace_id: abc123]
+├─ LLM call #1 (3.2s, 850 tokens)
+│   └─ tool_call: query_cb_price("浦发转债")
+├─ Tool execution (0.4s)
+│   └─ result: {"price": 105.2, "premium": 8.3}
+├─ LLM call #2 (2.8s, 720 tokens)
+│   └─ tool_call: query_stock_trend("600000")
+├─ Tool execution (0.6s)
+│   └─ result: {"trend": "upward"}
+└─ LLM call #3 (1.5s, 420 tokens)
+    └─ final_answer: "建议持有..."
+
+总耗时: 8.5s, 总 tokens: 1990, 工具成功率: 2/2
+</div>
+
+<p>每个 trace 节点记录：开始/结束时间、token 数、成本、输入输出、错误。当用户投诉"AI 给的答案不对"时，trace 是你定位问题的唯一线索。</p>
+
+<h3>四个核心指标</h3>
+
+<table>
+  <tr><th>指标</th><th>含义</th><th>异常说明什么</th></tr>
+  <tr>
+    <td>Token Usage</td>
+    <td>每次调用的 input/output token 数</td>
+    <td>突增 = prompt 变长或上下文堆积</td>
+  </tr>
+  <tr>
+    <td>Latency (P50/P95/P99)</td>
+    <td>首 token 延迟 (TTFT)、总时长</td>
+    <td>P99 飙升 = 模型超时或重试</td>
+  </tr>
+  <tr>
+    <td>Tool Success Rate</td>
+    <td>工具调用成功 / 总调用</td>
+    <td>下降 = 工具端 bug 或参数错误</td>
+  </tr>
+  <tr>
+    <td>Error Rate</td>
+    <td>按错误类型分类（JSON 解析失败、超时、API 限流）</td>
+    <td>某类激增 = 具体故障源</td>
+  </tr>
+</table>
+
+<h2>7. 工具选型：Langfuse vs Phoenix vs OpenTelemetry</h2>
+
+<p>2026 年主流的 LLM 可观测性工具：</p>
+
+<table>
+  <tr><th>工具</th><th>特点</th><th>适用场景</th></tr>
+  <tr>
+    <td>Langfuse</td>
+    <td>开源、自部署、LLM 应用专用</td>
+    <td>个人/小团队，数据不出内网</td>
+  </tr>
+  <tr>
+    <td>Phoenix (Arize)</td>
+    <td>开源 + 商业版，强项是 eval 和 drift 检测</td>
+    <td>需要离线 eval 和在线监控一体化</td>
+  </tr>
+  <tr>
+    <td>OpenTelemetry</td>
+    <td>通用可观测性标准，LLM 之上需自己扩展</td>
+    <td>已有完整 OTel 体系，不想引入新工具</td>
+  </tr>
+  <tr>
+    <td>LangSmith (LangChain)</td>
+    <td>商业 SaaS，和 LangChain 深度集成</td>
+    <td>用 LangChain 框架且不介意托管</td>
+  </tr>
+</table>
+
+<div class="callout">
+<strong>可转债项目选型建议：</strong>用 <strong>Langfuse 自部署</strong>。理由：数据敏感（转债持仓和策略不能外泄）、开源免费、对 Agent trace 原生支持、Python SDK 接入只需 3 行代码。LangSmith 商业版会让数据出内网，不符合你的项目约束。
+</div>
+
+<h2>8. 实战：给可转债 Agent 接入 Langfuse</h2>
+
+<pre><code># 第一步：装包
+# pip install langfuse anthropic
+
+from langfuse import Langfuse
+from langfuse.decorators import observe
+from anthropic import Anthropic
+
+langfuse = Langfuse()  # 从环境变量读 host/public_key/secret_key
+client = Anthropic()
+
+@observe()  # 这个 decorator 自动记录输入输出、token、耗时
+def cb_agent(question: str) -> str:
+    messages = [{"role": "user", "content": question}]
+    tools = load_cb_tools()
+
+    for step in range(10):
+        resp = client.messages.create(
+            model="claude-opus-4-6",
+            messages=messages,
+            tools=tools,
+        )
+
+        if resp.stop_reason == "end_turn":
+            return resp.content[0].text
+
+        # 把工具调用也作为子 trace 记录
+        for tool_use in resp.content:
+            if tool_use.type == "tool_use":
+                result = dispatch_tool_with_observation(tool_use)  # 内部也用 @observe
+                messages.append({"role": "assistant", "content": resp.content})
+                messages.append({"role": "user", "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": tool_use.id,
+                    "content": str(result),
+                }]})
+
+    return "未完成"
+
+# 运行后，去 Langfuse UI 看完整 trace
+cb_agent("浦发转债现在值得买吗？")</code></pre>
+
+<p>接入后，每次 Agent 调用在 Langfuse UI 上能看到完整链路：哪一步调了什么工具、每步耗时和 token、最终答案。出问题时直接定位到具体步骤。</p>
+
+<h2>9. 回归测试：CI 流水线里的 Eval</h2>
+
+<p>把离线评估做成 CI 步骤，每次改 prompt 或换模型版本时自动跑：</p>
+
+<pre><code># .github/workflows/llm-eval.yml 或 scripts/run_eval.py
+
+def regression_test():
+    golden_set = load_golden_set("tests/golden_set.json")
+    results = []
+
+    for sample in golden_set:
+        pred = cb_agent(sample.question)
+        scores = llm_judge(sample.question, sample.reference, pred)
+        results.append({
+            "id": sample.id,
+            "scores": scores,
+            "passed": all(v >= 1 for v in scores.values() if isinstance(v, int))
+        })
+
+    pass_rate = sum(r["passed"] for r in results) / len(results)
+
+    # 关键：和上一版本的 baseline 比较
+    baseline = load_baseline("tests/baseline.json")
+    if pass_rate < baseline - 0.05:
+        raise Exception(f"回归: {pass_rate:.2%} < baseline {baseline:.2%}")
+
+    save_baseline(pass_rate)
+    print(f"通过率 {pass_rate:.2%}")
+
+if __name__ == "__main__":
+    regression_test()</code></pre>
+
+<div class="callout-strong">
+<strong>Baseline 比较是关键：</strong>不要追求 100% 通过率——LLM 总会有边界 case 失败。要做的是和上一次发布的 baseline 比，<strong>不允许退化超过 5%</strong>。每次模型升级（claude-opus-4 → claude-opus-5）或 prompt 改动都跑一遍，确认没有回归。
+</div>
+
+<h2>10. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4 — 评估方法选择</h3>
+<p>你的可转债 RAG 系统上线后，用户反馈"AI 给的到期日和募集说明书对不上"。要定位这个问题，最直接的评估指标是？</p>
+<div class="quiz-option" data-id="q1" data-value="A" onclick="checkQuiz(this, 'C', 'q1')">A — Answer Relevance，看答案是否切题</div>
+<div class="quiz-option" data-id="q1" data-value="B" onclick="checkQuiz(this, 'C', 'q1')">B — Context Precision，看检索是否精确</div>
+<div class="quiz-option" data-id="q1" data-value="C" onclick="checkQuiz(this, 'C', 'q1')">C — Faithfulness，看答案是否忠于文档</div>
+<div class="quiz-option" data-id="q1" data-value="D" onclick="checkQuiz(this, 'C', 'q1')">D — Tool Success Rate，看工具调用成功率</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+<div class="quiz-explain" id="q1-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q1')">重试</button>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4 — LLM-as-judge 偏置</h3>
+<p>用 Claude 当评委评估 GPT-4 输出和 Claude 输出，发现 Claude 给 Claude 的平均分高 0.4。这种现象最准确的描述是？</p>
+<div class="quiz-option" data-id="q2" data-value="A" onclick="checkQuiz(this, 'C', 'q2')">A — 位置偏置，需要打乱顺序重跑</div>
+<div class="quiz-option" data-id="q2" data-value="B" onclick="checkQuiz(this, 'C', 'q2')">B — 长度偏置，需要限制输出字数</div>
+<div class="quiz-option" data-id="q2" data-value="C" onclick="checkQuiz(this, 'C', 'q2')">C — 自我偏好，需要跨模型交叉评估</div>
+<div class="quiz-option" data-id="q2" data-value="D" onclick="checkQuiz(this, 'C', 'q2')">D — 评分标准模糊，需要细化 rubric</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+<div class="quiz-explain" id="q2-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q2')">重试</button>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4 — Agent 评估难点</h3>
+<p>评估 Agent 时，你发现同一个问题"分析浦发转债"有两条合法路径：先查价格再查评级、或先查评级再查价格。直接用单条 golden trace 算 tool accuracy 会怎样？</p>
+<div class="quiz-option" data-id="q3" data-value="A" onclick="checkQuiz(this, 'B', 'q3')">A — 高估准确率，因为合法路径都被算对</div>
+<div class="quiz-option" data-id="q3" data-value="B" onclick="checkQuiz(this, 'B', 'q3')">B — 低估准确率，合法的替代路径被算错</div>
+<div class="quiz-option" data-id="q3" data-value="C" onclick="checkQuiz(this, 'B', 'q3')">C — 不影响准确率，只影响步骤数匹配</div>
+<div class="quiz-option" data-id="q3" data-value="D" onclick="checkQuiz(this, 'B', 'q3')">D — 仅影响参数评分，不影响工具选择</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+<div class="quiz-explain" id="q3-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q3')">重试</button>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4 — 在线监控设计</h3>
+<p>你的 Agent 上线后，发现 P95 延迟从 5s 涨到 12s，但 P50 没变。Token Usage 和 Tool Success Rate 都正常。最可能的故障源是？</p>
+<div class="quiz-option" data-id="q4" data-value="A" onclick="checkQuiz(this, 'D', 'q4')">A — 模型变慢，所有请求都受影响</div>
+<div class="quiz-option" data-id="q4" data-value="B" onclick="checkQuiz(this, 'D', 'q4')">B — 工具端故障导致重试，影响所有调用</div>
+<div class="quiz-option" data-id="q4" data-value="C" onclick="checkQuiz(this, 'D', 'q4')">C — Prompt 变长导致每次调用 token 增加</div>
+<div class="quiz-option" data-id="q4" data-value="D" onclick="checkQuiz(this, 'D', 'q4')">D — 少数复杂请求多走几步循环拉高尾部延迟</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+<div class="quiz-explain" id="q4-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q4')">重试</button>
+</div>
+
+<h2>11. 延伸阅读</h2>
+<ul>
+  <li><strong>Ragas 文档：</strong><a href="https://docs.ragas.io/" target="_blank">docs.ragas.io</a> — RAG 评估事实标准，Python 库直接用</li>
+  <li><strong>Langfuse 文档：</strong><a href="https://langfuse.com/docs" target="_blank">langfuse.com/docs</a> — 自部署的 LLM 可观测性平台</li>
+  <li><strong>LLM-as-judge 论文：</strong><a href="https://arxiv.org/abs/2306.05685" target="_blank">Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena (2023)</a> — 评委模式的奠基论文</li>
+  <li><strong>动手：</strong>给第 10 课的可转债 Agent 接入 Langfuse（自部署 Docker 一行起），跑 5 个测试问题，在 UI 上观察 trace，识别哪个步骤最耗时</li>
+</ul>
+
+<div class="footer">
+<p><strong>下节预告（第12课）：</strong>vLLM 推理部署 —— PagedAttention 原理、Continuous Batching、显存规划、把开源模型跑成 OpenAI 兼容 API。从"用 API"到"自己提供 API"。</p>
+<p style="margin-top:0.8rem;">有任何疑问？直接在对话中提，老师会帮你理清楚。</p>
+</div>
+
+<div class="nav">
+  <a href="0010-agent-patterns.html">← 第10课：Agent 设计模式</a>
+  <a href="0012-vllm-deployment.html">下一课：vLLM 推理部署 →</a>
+</div>
+
+<script>
+function checkQuiz(el, expected, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  const ex = parent.querySelector('.quiz-explain');
+  const retry = parent.querySelector('.quiz-retry');
+  if (el.dataset.value === expected) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确。';
+    fb.style.color = '#22863a';
+    ex.style.display = 'block';
+    const explains = {
+      'q1': '"到期日和募集说明书对不上" = 答案中的事实无法在检索到的文档中找到支撑，这正是 Faithfulness 的定义。Answer Relevance 看的是答案是否回应用户问题（哪怕答案是编的），Context Precision 看的是检索质量，Tool Success Rate 是 Agent 维度的指标，不是 RAG 评估范畴。',
+      'q2': '同族模型给自己打分偏高是已知的"自我偏好"偏置。位置偏置是"先出现的答案占优"，长度偏置是"更长的输出占优"，两者都不取决于模型族匹配。解法是跨模型交叉评：用 GPT-4 评 Claude 输出，用 Claude 评 GPT-4 输出，取平均。',
+      'q3': '单条 golden trace 只记录一条合法路径。如果模型走了另一条等价合法路径，每一步的 tool_name 都和 golden trace 对不上，会被算作 0 分——但其实路径是对的。这会严重低估准确率。正确做法是 golden trace 存"合法路径集合"，只要命中集合中任一条都算对。',
+      'q4': 'P95 飙升而 P50 不变意味着尾部延迟恶化，少数请求变慢。如果模型整体变慢，P50 也会涨；如果工具故障重试，Tool Success Rate 会下降；如果 Prompt 变长，Token Usage 会增加。少数复杂请求走了更多步循环，拉高尾部延迟，符合所有指标特征。'
+    };
+    ex.innerHTML = explains[qid] || '';
+    retry.style.display = 'inline-block';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再仔细想想。';
+    fb.style.color = '#d73a49';
+    ex.style.display = 'none';
+    retry.style.display = 'inline-block';
+  }
+}
+
+function resetQuiz(btn, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'auto';
+  });
+  parent.querySelector('.quiz-feedback').innerHTML = '';
+  parent.querySelector('.quiz-explain').style.display = 'none';
+  btn.style.display = 'none';
+}
+</script>
+
+</body>
+</html>
