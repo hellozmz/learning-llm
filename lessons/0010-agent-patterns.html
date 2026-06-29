@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第10课：Agent 设计模式</title>
+<style>
+  :root {
+    --bg: #fdfcf9; --text: #2c2c2c; --accent: #0366d6;
+    --muted: #6a737d; --border: #e1e4e8; --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Georgia", "Noto Serif SC", serif;
+    line-height: 1.7; color: var(--text); background: var(--bg);
+    max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem; font-size: 17px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.8rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+  p { margin-bottom: 1rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 3px;
+    font-size: 0.9em; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  pre {
+    background: var(--code-bg); padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; margin: 1rem 0; font-size: 0.86em; line-height: 1.55;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  .callout {
+    background: #f0f7ff; border-left: 4px solid var(--accent);
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-strong {
+    background: #fffdf0; border-left: 4px solid #d4a017;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .callout-danger {
+    background: #fff0f0; border-left: 4px solid #d73a49;
+    padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; font-size: 0.93em;
+  }
+  .quiz {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0;
+  }
+  .quiz h3 { margin-top: 0; color: var(--text); }
+  .quiz-option {
+    display: block; padding: 0.5rem 0.8rem; margin: 0.3rem 0;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-size: 0.93em; transition: background 0.15s; font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .quiz-option:hover { background: #f0f7ff; }
+  .quiz-option.correct { background: #dcffe4; border-color: #34d058; }
+  .quiz-option.wrong { background: #ffeef0; border-color: #d73a49; }
+  .quiz-feedback { margin-top: 0.5rem; font-size: 0.9em; min-height: 1.5em; }
+  .quiz-explain { margin-top: 0.3rem; font-size: 0.88em; color: var(--muted); display: none; }
+  .quiz-retry {
+    margin-top: 0.6rem; padding: 0.3rem 1rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: var(--muted); cursor: pointer;
+    font-size: 0.85em; display: none;
+  }
+  .quiz-retry:hover { border-color: var(--accent); color: var(--accent); }
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem;
+    border-top: 2px solid var(--border); color: var(--muted); font-size: 0.85em;
+  }
+  .nav { display: flex; justify-content: space-between; margin-top: 2rem; font-size: 0.9em; }
+  .figure {
+    text-align: left; margin: 1.2rem 0;
+    font-family: "SF Mono", monospace; font-size: 0.82em; line-height: 1.55;
+    white-space: pre; background: var(--code-bg);
+    padding: 1rem 1.2rem; border-radius: 6px; overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em;
+  }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  th { background: var(--code-bg); }
+</style>
+</head>
+<body>
+
+<h1>第10课：Agent 设计模式</h1>
+<p class="subtitle">工具会用了，协议也标准了。下一个问题：如何让模型自主决定"用哪些工具、按什么顺序、什么时候停下来"？<br>预计时间：40 分钟 &nbsp;|&nbsp; 2026-06-28</p>
+
+<h2>1. Agent 的本质：一个带工具的 while 循环</h2>
+
+<p>在第 8、9 课里，工具的调用是单轮的：你问 → 模型决定调 → 执行 → 返回结果。整个过程一个来回就结束了。</p>
+
+<p><strong>Agent 的核心差别只有一个：循环。</strong>模型可以拿到工具执行结果后，再决定下一步做什么，直到它认为目标达成。</p>
+
+<div class="figure">
+# 伪代码——Agent 的本质
+
+messages = [{"role": "user", "content": goal}]
+
+while True:
+    response = llm(messages, tools=available_tools)
+
+    if response.stop_reason == "end_turn":
+        break                          # 模型认为任务完成
+
+    tool_call = response.tool_calls[0]
+    result = execute(tool_call)        # 实际调用工具
+
+    messages.append(response)          # 把模型输出加入历史
+    messages.append(tool_result)       # 把工具结果加入历史
+    # 继续循环，模型看到新信息后决定下一步
+</div>
+
+<p>这就是 Agent。没有魔法。只是把第 8 课的单次 Function Calling 包进了一个循环里，并且把工具执行结果持续喂回模型。</p>
+
+<div class="callout">
+<strong>和搜索系统的类比：</strong>如果你做过多轮检索（query → result → 根据结果改写 query → 再检索），你已经理解了 Agent 的核心逻辑。唯一的区别是：改写 query 的是 LLM，执行 query 的是工具，"改写策略"由提示词和上下文隐式编码，而不是你写死的规则。
+</div>
+
+<h2>2. ReAct：让思考过程可见</h2>
+
+<p>最简单也最常用的 Agent 模式来自 2022 年的论文 <em>ReAct: Synergizing Reasoning and Acting in Language Models</em>。核心思路只有一句话：<strong>强迫模型在每次行动前先输出思考过程。</strong></p>
+
+<div class="figure">
+ReAct 一个步骤的结构：
+
+Thought: 我需要先查浦发转债的当前溢价率，再判断是否触发策略
+Action: query_cb_premium({"cb_name": "浦发转债"})
+Observation: {"premium_rate": 8.3, "price": 105.2}
+
+Thought: 溢价率 8.3%，低于双低策略阈值 15%，符合买入条件
+         但我还需要确认正股趋势，再调一次工具
+Action: query_stock_trend({"stock_code": "600000"})
+Observation: {"trend": "sideways", "ma20_slope": -0.02}
+
+Thought: 正股横盘偏弱，结合溢价率综合判断：建议持仓而非加仓
+Final Answer: 浦发转债当前溢价率 8.3%，但正股动量偏弱，建议维持仓位不加仓。
+</div>
+
+<p>Thought 的作用不只是给人看的。它实际上是在做 <strong>chain-of-thought</strong>：先把问题分解写出来，后续 token 的生成会以这个思考为条件，决策质量比直接输出 Action 更高。</p>
+
+<h3>ReAct 的实现</h3>
+
+<pre><code>SYSTEM_PROMPT = """你是一个可转债分析助手。使用工具时，先输出 Thought（思考过程），
+再输出 Action（工具调用）。拿到 Observation（工具结果）后继续思考，
+直到你确信能给出最终答案。"""
+
+def react_agent(goal: str, tools: list, max_steps: int = 10) -> str:
+    messages = [{"role": "user", "content": goal}]
+
+    for step in range(max_steps):
+        response = client.messages.create(
+            model="claude-opus-4-6",
+            system=SYSTEM_PROMPT,
+            messages=messages,
+            tools=tools,
+        )
+
+        if response.stop_reason == "end_turn":
+            return extract_final_answer(response)
+
+        # 执行工具调用
+        tool_results = []
+        for tool_use in response.content:
+            if tool_use.type == "tool_use":
+                result = dispatch_tool(tool_use.name, tool_use.input)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_use.id,
+                    "content": str(result)
+                })
+
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append({"role": "user", "content": tool_results})
+
+    return "达到最大步数，任务未完成"  # 安全退出</code></pre>
+
+<p>注意 <code>max_steps</code>：这是 Agent 不可缺少的安全阀。没有它，模型有可能陷入工具调用循环（不断调同一个工具，每次结果相同，但模型不知道怎么推进）。</p>
+
+<div class="callout-danger">
+<strong>ReAct 的典型失效模式：</strong>模型在某一步得到了"没有足够信息"的工具结果，但继续用同样的参数重复调用同一个工具，期待结果不同。这不是模型 bug——是你的提示词没有告诉它"工具无结果时应该怎么办"。补救：在 system prompt 里加"如果工具连续返回相同结果，停止重试，报告已知信息"。
+</div>
+
+<h2>3. Plan-and-Execute：先规划，再执行</h2>
+
+<p>ReAct 是贪心的：每一步只看当前状态，决定下一步。这对短任务够用，但有个问题：<strong>它无法在第 1 步就判断第 5 步需要什么信息。</strong></p>
+
+<p>Plan-and-Execute 把工作分成两个阶段：</p>
+
+<div class="figure">
+阶段一：规划（Planner LLM）
+
+输入: "分析浦发转债的投资价值，输出买卖建议"
+输出:
+  Step 1: 查询浦发转债当前价格和溢价率
+  Step 2: 获取正股浦发银行近 20 日趋势
+  Step 3: 查询该转债距到期日和强赎触发情况
+  Step 4: 综合以上数据，参照双低策略阈值，给出建议
+
+──────────────────────────────────────────────
+
+阶段二：执行（Executor LLM 或直接调工具）
+
+  Step 1 → 调 query_cb_premium() → 结果: premium=8.3%
+  Step 2 → 调 query_stock_trend() → 结果: sideways
+  Step 3 → 调 query_cb_maturity()  → 结果: 18 months, no redeem trigger
+  Step 4 → 综合推理 → 输出建议
+</div>
+
+<p>实现上，Planner 是一次专用的 LLM 调用，输出结构化的步骤列表；Executor 顺序（或并行）执行每个步骤，可以是直接调工具，也可以是另一个 LLM 做子推理。</p>
+
+<pre><code>def plan_and_execute(goal: str, tools: list) -> str:
+    # 阶段一：规划
+    plan_response = client.messages.create(
+        model="claude-opus-4-6",
+        system="把任务分解为顺序执行的步骤列表，每步对应一个工具调用或推理操作。"
+               "输出 JSON: {\"steps\": [{\"description\": ..., \"tool\": ..., \"args\": ...}]}",
+        messages=[{"role": "user", "content": goal}],
+    )
+    steps = json.loads(plan_response.content[0].text)["steps"]
+
+    # 阶段二：执行
+    context = {}
+    for i, step in enumerate(steps):
+        if step.get("tool"):
+            result = dispatch_tool(step["tool"], step["args"])
+            context[f"step_{i}_result"] = result
+        else:
+            # 推理步骤：把之前的上下文喂给模型
+            result = synthesize(step["description"], context)
+            context["final_answer"] = result
+
+    return context.get("final_answer", str(context))</code></pre>
+
+<h3>ReAct vs Plan-and-Execute：怎么选</h3>
+
+<table>
+  <tr><th>维度</th><th>ReAct</th><th>Plan-and-Execute</th></tr>
+  <tr><td>适用任务长度</td><td>短（1–5步）</td><td>长（5步以上）</td></tr>
+  <tr><td>工具结果可预测性</td><td>低（结果影响下一步选择）</td><td>高（步骤间依赖关系固定）</td></tr>
+  <tr><td>并行执行</td><td>天然串行</td><td>无依赖步骤可并行</td></tr>
+  <tr><td>调试难度</td><td>低（每步可观测）</td><td>中（规划出错全盘错）</td></tr>
+  <tr><td>规划容错</td><td>动态调整，天然容错</td><td>计划错则需要重规划逻辑</td></tr>
+</table>
+
+<div class="callout-strong">
+<strong>经验法则：</strong>当你能在调用工具前就列出所有步骤时，用 Plan-and-Execute。当你不知道第 2 步要干什么直到看到第 1 步的结果时，用 ReAct。现实中，二者经常混用：先 Plan，执行时每步用 ReAct 处理意外情况。
+</div>
+
+<h2>4. 单 Agent vs 多 Agent</h2>
+
+<p>多 Agent 系统（Multi-Agent）听起来像自然的进化：既然一个 Agent 能自主决策，多个 Agent 分工协作岂不更强？</p>
+
+<p>现实更复杂。先看看什么时候多 Agent <strong>真正</strong>有价值：</p>
+
+<div class="figure">
+多 Agent 的合理场景：
+
+  ┌─────────────────────────────────────────────────────┐
+  │  场景 A：并行独立子任务                                │
+  │                                                     │
+  │  Orchestrator                                       │
+  │       ├──► Agent₁: 分析浦发转债条款     (独立)        │
+  │       ├──► Agent₂: 分析正股技术面       (独立)        │
+  │       └──► Agent₃: 检索近期评级变更     (独立)        │
+  │                ↓ 汇总结果                            │
+  │  三个任务无依赖，并行执行，总耗时 = max(三者)           │
+  └─────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────┐
+  │  场景 B：专业分工（工具权限隔离）                       │
+  │                                                     │
+  │  ResearchAgent（只读外部数据，无写权限）                │
+  │       ↓ 产出分析报告                                 │
+  │  WriterAgent（只调格式化和输出工具）                   │
+  │       ↓ 产出结构化报告                               │
+  │  权限边界清晰，每个 Agent 的工具集最小化               │
+  └─────────────────────────────────────────────────────┘
+</div>
+
+<p>以下是多 Agent <strong>不应该</strong>用的常见误区：</p>
+
+<div class="callout-danger">
+<strong>误区 1：</strong>"我需要一个'分析师 Agent'和一个'写作 Agent'来让输出更好。" — 这不需要多 Agent，一个 Agent + 两步提示词（先分析，再写作）完全等价，还少了协调开销。<br><br>
+<strong>误区 2：</strong>"拆成多个 Agent，每个上下文更短，模型表现更好。" — 上下文缩短确实有帮助，但同样可以通过总结历史、压缩工具输出来解决，不必拆 Agent。<br><br>
+<strong>误区 3：</strong>"给每个 Agent 一个角色（'你是一个悲观的批评者'），让它们互相辩论来提升质量。" — 这在大多数场景下实测结果并不优于单次高质量提示，但 latency 翻倍。
+</div>
+
+<h3>多 Agent 的工程成本</h3>
+
+<p>引入多 Agent 之后，你需要处理：</p>
+<ul>
+  <li><strong>消息格式对齐</strong>：Agent 之间传什么结构？如何处理一个 Agent 返回的格式另一个不认识的情况？</li>
+  <li><strong>错误传播</strong>：Agent A 返回垃圾输出，Agent B 要不要继续？怎么检测和中断？</li>
+  <li><strong>调试困难</strong>：系统出错时，是哪个 Agent 的锅？日志怎么关联？</li>
+  <li><strong>成本放大</strong>：每个 Agent 调用 = 一次 LLM 调用。4 个 Agent 的流水线 = 至少 4× 的 token 成本。</li>
+</ul>
+
+<div class="callout">
+<strong>从 Anthropic 工程实践的角度：</strong>先做好单 Agent + 丰富的工具集。只有当单 Agent 在某个维度上确实碰到了天花板（上下文超限、并行需求明确、权限隔离必须），才引入多 Agent。大多数"感觉需要多 Agent"的场景，其实是单 Agent 的提示词写得不够好。
+</div>
+
+<h2>5. 框架该不该用？</h2>
+
+<p>LangChain、LangGraph、CrewAI、AutoGen……这些框架的存在感很强。但在选择之前，先做一个判断：</p>
+
+<div class="figure">
+决策树：
+
+你需要 Agent 吗？
+└─ 不，单次 LLM 调用就够 → 直接用 SDK，不用框架
+
+你需要 Agent 吗？
+└─ 是。任务 < 5 步，工具 < 5 个？
+   └─ 是 → 自己写 while 循环（< 50 行），不用框架
+   └─ 否 → 任务有复杂状态、需要 checkpoint/回滚/并行？
+            └─ 否 → 还是自己写，加一个简单状态 dict
+            └─ 是 → 考虑 LangGraph（状态图模型，适合有
+                        显式状态转移的复杂 Agent）
+</div>
+
+<p>框架真正解决的问题是：状态持久化、断点续跑、可视化调试、内置的 retry/fallback。如果你不需要这些，引入框架只是引入了学习成本和依赖。</p>
+
+<div class="callout-strong">
+<strong>2026 年的主流实践：</strong>Provider SDK（Anthropic/OpenAI）+ MCP 工具 + 自己的循环逻辑，在大多数场景下已经足够。LangGraph 适合有复杂状态图的场景（比如多步骤审批流程，需要人工介入节点）。不要因为"大家都在用"就引入框架——先用最简单的方式跑通，再根据实际遇到的瓶颈选择框架。
+</div>
+
+<h2>6. 接上前两节的完整链路</h2>
+
+<p>把第 8、9、10 课串起来，一个完整的 Agent 系统长这样：</p>
+
+<div class="figure">
+用户目标: "找出当前最值得关注的低溢价率可转债，给出理由"
+
+Agent 循环 (第10课: ReAct/Plan-and-Execute)
+    │
+    ├─ 决策调哪个工具 (第8课: Function Calling)
+    │
+    ├─ 通过 MCP 协议发送工具调用 (第9课: MCP)
+    │       │
+    │       └─ MCP Server 执行:
+    │              query_low_premium_bonds()
+    │              query_market_temperature()
+    │              calculate_double_low_score()
+    │
+    └─ 拿到结果，继续推理或给出最终答案
+
+关键分工:
+  Function Calling = 模型决策"用哪个工具、传什么参数"
+  MCP Protocol    = 工具的标准化发现与传输
+  Agent Loop      = "循环 + 停止条件 + 历史管理"
+</div>
+
+<h2>7. 自检</h2>
+
+<div class="quiz" id="q1">
+<h3>问题 1/4 — 代码分析</h3>
+<p>下面这段 ReAct Agent 代码有一个严重缺陷，会导致无限循环：</p>
+<pre style="font-size:0.82em; margin:0.5rem 0;">for step in range(max_steps):
+    response = llm(messages, tools)
+    if response.stop_reason == "end_turn":
+        break
+    tool_results = execute_all_tools(response.tool_calls)
+    messages.append(response)
+    # 缺少这一行: messages.append(tool_results)
+    # 问题出在哪里？</pre>
+<div class="quiz-option" data-id="q1" data-value="A" onclick="checkQuiz(this, 'B', 'q1')">A — max_steps 没有做边界检查，步数过多导致栈溢出</div>
+<div class="quiz-option" data-id="q1" data-value="B" onclick="checkQuiz(this, 'B', 'q1')">B — 工具结果没有加入 messages，模型每次看到的上下文相同，会重复相同决策</div>
+<div class="quiz-option" data-id="q1" data-value="C" onclick="checkQuiz(this, 'B', 'q1')">C — execute_all_tools 返回值类型与 messages 格式不兼容导致追加失败</div>
+<div class="quiz-option" data-id="q1" data-value="D" onclick="checkQuiz(this, 'B', 'q1')">D — response.tool_calls 为空时 execute_all_tools 抛出异常中断循环</div>
+<div class="quiz-feedback" id="q1-fb"></div>
+<div class="quiz-explain" id="q1-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q1')">重试</button>
+</div>
+
+<div class="quiz" id="q2">
+<h3>问题 2/4 — 场景判断</h3>
+<p>你要构建一个 Agent：用户输入一只可转债代码，Agent 自动拉取价格、正股趋势、评级、距到期日，然后综合输出一段投资分析。以下说法哪项最准确？</p>
+<div class="quiz-option" data-id="q2" data-value="A" onclick="checkQuiz(this, 'C', 'q2')">A — 应用 ReAct，因为工具调用之间存在动态依赖必须逐步决策</div>
+<div class="quiz-option" data-id="q2" data-value="B" onclick="checkQuiz(this, 'C', 'q2')">B — 必须用多 Agent，让不同 Agent 分别负责数据采集和写作输出</div>
+<div class="quiz-option" data-id="q2" data-value="C" onclick="checkQuiz(this, 'C', 'q2')">C — Plan-and-Execute 更合适，步骤固定且前三步可并行执行缩短延迟</div>
+<div class="quiz-option" data-id="q2" data-value="D" onclick="checkQuiz(this, 'C', 'q2')">D — 不需要 Agent，一次 Function Calling 就能完成所有工具调用任务</div>
+<div class="quiz-feedback" id="q2-fb"></div>
+<div class="quiz-explain" id="q2-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q2')">重试</button>
+</div>
+
+<div class="quiz" id="q3">
+<h3>问题 3/4 — 多 Agent 决策</h3>
+<p>以下四个需求，哪一个引入多 Agent 的理由最充分？</p>
+<div class="quiz-option" data-id="q3" data-value="A" onclick="checkQuiz(this, 'D', 'q3')">A — 希望一个 Agent 扮演"乐观分析师"，另一个扮演"悲观批评者"，让它们辩论</div>
+<div class="quiz-option" data-id="q3" data-value="B" onclick="checkQuiz(this, 'D', 'q3')">B — 单 Agent 上下文太长，想拆成两个 Agent 每个只处理一半信息</div>
+<div class="quiz-option" data-id="q3" data-value="C" onclick="checkQuiz(this, 'D', 'q3')">C — 想先让 Agent 做数据分析，再让另一个 Agent 把结果写成报告格式</div>
+<div class="quiz-option" data-id="q3" data-value="D" onclick="checkQuiz(this, 'D', 'q3')">D — 需要同时对市场中 300 只转债并行执行相同的分析流程以缩短总耗时</div>
+<div class="quiz-feedback" id="q3-fb"></div>
+<div class="quiz-explain" id="q3-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q3')">重试</button>
+</div>
+
+<div class="quiz" id="q4">
+<h3>问题 4/4 — 故障分析</h3>
+<p>你的 ReAct Agent 在运行时出现了这个现象：到达 max_steps 后仍未给出答案，日志显示模型连续 6 步都在调用同一个工具 <code>query_cb_price("浦发转债")</code>，每次得到相同的结果。根本原因最可能是什么？</p>
+<div class="quiz-option" data-id="q4" data-value="A" onclick="checkQuiz(this, 'C', 'q4')">A — max_steps 设置过低，正常任务需要更多步骤才能完成推理</div>
+<div class="quiz-option" data-id="q4" data-value="B" onclick="checkQuiz(this, 'C', 'q4')">B — 工具返回的 JSON 格式有误，模型无法解析导致反复重试调用</div>
+<div class="quiz-option" data-id="q4" data-value="C" onclick="checkQuiz(this, 'C', 'q4')">C — 提示词没有告知模型工具无新信息时的退出策略，模型陷入局部循环</div>
+<div class="quiz-option" data-id="q4" data-value="D" onclick="checkQuiz(this, 'C', 'q4')">D — 模型温度参数过高，每次生成的 tool_call 参数随机变化无法收敛</div>
+<div class="quiz-feedback" id="q4-fb"></div>
+<div class="quiz-explain" id="q4-ex"></div>
+<button class="quiz-retry" onclick="resetQuiz(this, 'q4')">重试</button>
+</div>
+
+<h2>8. 延伸阅读</h2>
+<ul>
+  <li><strong>原始论文：</strong><a href="https://arxiv.org/abs/2210.03629" target="_blank">ReAct: Synergizing Reasoning and Acting in Language Models (2022)</a> — 10 页，值得通读</li>
+  <li><strong>Anthropic 工程指南：</strong><a href="https://www.anthropic.com/research/building-effective-agents" target="_blank">Building Effective Agents</a> — 明确提出"先单 Agent，框架是最后手段"的工程哲学</li>
+  <li><strong>动手：</strong>把你的可转债数据查询工具（第 8 课）包装成 MCP Server（第 9 课），然后用本课的 <code>react_agent</code> 骨架写一个能自主完成"分析一只转债"的完整 Agent，不要依赖任何框架</li>
+</ul>
+
+<div class="footer">
+<p><strong>下节预告（第11课）：</strong>Eval + 可观测性 —— Agent 上线后怎么知道它在正常工作？离线评估（测试集 + LLM-as-judge）和在线监控（追踪每一步的 token 数、延迟、工具成功率）是生产级 Agent 的必备基础。</p>
+<p style="margin-top:0.8rem;">有任何疑问？直接在对话中提，老师会帮你理清楚。</p>
+</div>
+
+<div class="nav">
+  <a href="0009-mcp-protocol.html">← 第9课：MCP 协议</a>
+  <a href="0011-eval-observability.html">下一课：Eval + 可观测性 →</a>
+</div>
+
+<script>
+function checkQuiz(el, expected, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'none';
+  });
+  const fb = parent.querySelector('.quiz-feedback');
+  const ex = parent.querySelector('.quiz-explain');
+  const retry = parent.querySelector('.quiz-retry');
+  if (el.dataset.value === expected) {
+    el.classList.add('correct');
+    fb.innerHTML = '✓ 正确。';
+    fb.style.color = '#22863a';
+    ex.style.display = 'block';
+    const explains = {
+      'q1': '工具结果没有追加到 messages 是致命缺陷。Agent 循环的核心是"模型看到工具执行结果后决定下一步"。如果 tool_results 不加入 messages，模型每次进入循环看到的上下文完全相同（只有初始 user 消息 + 上一步的 assistant 回复），必然做出相同决策，无限重复同一个工具调用。',
+      'q2': '步骤是固定的：价格、趋势、评级、到期日这四个查询在任何情况下都要做，且前三个工具调用互不依赖。Plan-and-Execute 可以把这三个步骤并行化（asyncio 或线程池），大幅降低延迟。ReAct 天然串行，在步骤固定的场景下浪费了并行机会。单次 Function Calling 不足是因为后续需要综合推理，不是一轮就能完成的。',
+      'q3': 'A（角色辩论）实测效果有限且 latency 翻倍；B（拆上下文）用总结/压缩单 Agent 可以解决；C（分析+写作流水线）两步提示词单 Agent 完全胜任。D 是真实的并行需求——300 只转债如果串行跑，耗时是并行的 300 倍，这是多 Agent/多进程真正解决的问题。',
+      'q4': 'B 和 D 都能导致重复调用，但日志显示参数完全相同（"浦发转债"固定不变），排除随机性。工具返回了有效数据但模型仍继续调用，说明模型不知道"拿到数据之后该做什么"——提示词缺少明确的行为规范：当工具结果与上轮相同时，停止重试，转而进行推理或报告已知信息。这是 ReAct 提示词设计的必要内容。'
+    };
+    ex.innerHTML = explains[qid] || '';
+    retry.style.display = 'inline-block';
+  } else {
+    el.classList.add('wrong');
+    fb.innerHTML = '✗ 再仔细想想。';
+    fb.style.color = '#d73a49';
+    ex.style.display = 'none';
+    retry.style.display = 'inline-block';
+  }
+}
+
+function resetQuiz(btn, qid) {
+  const parent = document.getElementById(qid);
+  parent.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.classList.remove('correct', 'wrong');
+    opt.style.pointerEvents = 'auto';
+  });
+  parent.querySelector('.quiz-feedback').innerHTML = '';
+  parent.querySelector('.quiz-explain').style.display = 'none';
+  btn.style.display = 'none';
+}
+</script>
+
+</body>
+</html>
